@@ -10,10 +10,16 @@ Strategy (Problem 6 upgrade):
   3. If no units are found (e.g. non-Python repos), fall back to
      file-level retrieval (top 5 files).
   4. Enforce a 12,000-character hard limit on the context string.
+
+Edge cases handled:
+  - Empty / stopword-only queries → warns "too generic".
+  - All files deleted since indexing → warns "no readable files".
+  - Graph has nodes but all unreadable → graceful empty return.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import networkx as nx
@@ -32,6 +38,30 @@ from cni.retrieval.semantic_search import (
 
 MAX_CONTEXT_CHARS: int = 12_000
 """Hard limit on the total context string sent to the LLM."""
+
+# Common English stopwords — a query consisting entirely of these is too
+# generic to produce useful semantic search results.
+_STOPWORDS: set[str] = {
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "shall",
+    "should", "may", "might", "must", "can", "could", "it", "its", "this",
+    "that", "these", "those", "i", "me", "my", "we", "our", "you", "your",
+    "he", "she", "they", "them", "what", "which", "who", "whom", "how",
+    "where", "when", "why", "not", "no", "nor", "and", "or", "but", "if",
+    "of", "at", "by", "for", "with", "about", "to", "from", "in", "on",
+    "up", "out", "into", "all", "so", "than",
+}
+
+
+def _warn(message: str) -> None:
+    """Print a yellow warning to stderr."""
+    sys.stderr.write(f"\033[33m⚠  {message}\033[0m\n")
+
+
+def _is_stopword_only(query: str) -> bool:
+    """Return True if every word in *query* is a stopword."""
+    words = query.lower().split()
+    return len(words) > 0 and all(w in _STOPWORDS for w in words)
 
 
 # ---------------------------------------------------------------------------
@@ -53,8 +83,16 @@ def build_context(graph: nx.DiGraph, query: str) -> str:
     Returns:
         Formatted context string ready to send to an LLM.
     """
-    if graph.number_of_nodes() == 0 or not query.strip():
+    if graph.number_of_nodes() == 0:
         return "No relevant files found in the codebase for this query."
+
+    if not query.strip():
+        return "No relevant files found in the codebase for this query."
+
+    # Stopword-only guard
+    if _is_stopword_only(query):
+        _warn("Query too generic. Try being more specific.")
+        return ""
 
     file_paths: list[str] = list(graph.nodes)
 
@@ -63,11 +101,17 @@ def build_context(graph: nx.DiGraph, query: str) -> str:
     # ------------------------------------------------------------------
     all_units: list[dict] = []
     for fp in file_paths:
-        all_units.extend(extract_functions(fp))
+        try:
+            all_units.extend(extract_functions(fp))
+        except Exception:  # noqa: BLE001
+            pass
 
     if all_units:
-        build_function_index(all_units)
-        relevant_units = search_function_index(query, k=10)
+        try:
+            build_function_index(all_units)
+            relevant_units = search_function_index(query, k=10)
+        except Exception:  # noqa: BLE001
+            relevant_units = []
 
         if relevant_units:
             return _format_function_context(relevant_units)
@@ -75,11 +119,15 @@ def build_context(graph: nx.DiGraph, query: str) -> str:
     # ------------------------------------------------------------------
     # Fallback: file-level indexing
     # ------------------------------------------------------------------
-    build_index(file_paths)
-    relevant_files: list[str] = search_index(query, k=5)
+    try:
+        build_index(file_paths)
+        relevant_files: list[str] = search_index(query, k=5)
+    except Exception:  # noqa: BLE001
+        relevant_files = []
 
     if not relevant_files:
-        return "No relevant files found in the codebase for this query."
+        _warn("No readable files found for this query.")
+        return ""
 
     return _format_file_context(relevant_files)
 
@@ -118,7 +166,8 @@ def _format_file_context(file_paths: list[str]) -> str:
             pass
 
     if not parts:
-        return "Could not read relevant files."
+        _warn("No readable files found for this query.")
+        return ""
 
     combined = "\n\n".join(parts)
     return combined[:MAX_CONTEXT_CHARS]

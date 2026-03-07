@@ -20,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import networkx as nx
+import requests
 import typer
 
 from cni.analysis.explainer import explain_file, print_file_explanation, _resolve_node
@@ -652,6 +653,76 @@ def connect(
         f"\nTotal files: {unified.number_of_nodes()}    "
         f"Total edges: {unified.number_of_edges()}"
     )
+
+
+@app.command()
+def doctor() -> None:
+    """Run diagnostic checks for CNI's dependencies.
+
+    Checks:
+      1. Ollama reachability
+      2. Available Ollama models
+      3. Graphviz installation
+      4. CNI cache presence
+    """
+    import shutil
+
+    ok = typer.style("✓", fg=typer.colors.GREEN)
+    fail = typer.style("✗", fg=typer.colors.RED)
+
+    # --- 1. Ollama reachable? -------------------------------------------
+    try:
+        resp = requests.get("http://localhost:11434/api/tags", timeout=5)
+        if resp.status_code == 200:
+            typer.echo(f"  {ok}  Ollama is running")
+
+            # --- 2. Models available? -----------------------------------
+            try:
+                data = resp.json()
+                models = data.get("models", [])
+                if models:
+                    model_name = models[0].get("name", "unknown")
+                    typer.echo(f"  {ok}  Model found: {model_name}")
+                else:
+                    typer.echo(
+                        f"  {fail}  No models found  →  run: "
+                        "ollama pull deepseek-coder"
+                    )
+            except Exception:
+                typer.echo(
+                    f"  {fail}  No models found  →  run: "
+                    "ollama pull deepseek-coder"
+                )
+        else:
+            typer.echo(f"  {fail}  Ollama not running  →  run: ollama serve")
+            typer.echo(
+                f"  {fail}  No models found  →  run: "
+                "ollama pull deepseek-coder"
+            )
+    except Exception:
+        typer.echo(f"  {fail}  Ollama not running  →  run: ollama serve")
+        typer.echo(
+            f"  {fail}  No models found  →  run: "
+            "ollama pull deepseek-coder"
+        )
+
+    # --- 3. Graphviz installed? -----------------------------------------
+    if shutil.which("dot"):
+        typer.echo(f"  {ok}  Graphviz is installed")
+    else:
+        typer.echo(
+            f"  {fail}  Graphviz not installed  →  "
+            "brew install graphviz"
+        )
+
+    # --- 4. Cache present? ----------------------------------------------
+    cache_path = Path(".cni") / "cache.json"
+    if cache_path.exists():
+        typer.echo(f"  {ok}  Cache found: .cni/cache.json")
+    else:
+        typer.echo(
+            f"  {fail}  No cache found  →  run: cni analyze ."
+        )
 
 
 # ---------------------------------------------------------------------------

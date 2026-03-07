@@ -10,9 +10,15 @@ from __future__ import annotations
 import ast
 import os
 import re
+import sys
 from pathlib import Path
 
 import networkx as nx
+
+
+def _warn(message: str) -> None:
+    """Print a yellow warning to stderr."""
+    sys.stderr.write(f"\033[33m⚠  {message}\033[0m\n")
 
 
 # ---------------------------------------------------------------------------
@@ -234,13 +240,20 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
     ]
 
     if not paths:
+        print(
+            "No supported source files found.\n"
+            "CNI supports: .py .js .ts .jsx .tsx"
+        )
         return nx.DiGraph()
 
     lookup = _build_lookup(paths)
     graph = nx.DiGraph()
 
-    # Add every file as a node (even if it imports nothing)
+    # Add every file as a node (skip deleted files)
     for fp in paths:
+        if not fp.exists():
+            _warn(f"File deleted since scan: {fp.name} — skipping")
+            continue
         graph.add_node(
             str(fp),
             language=fp.suffix.lstrip("."),
@@ -249,10 +262,21 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
 
     # Add edges for every resolvable import
     for fp in paths:
+        if str(fp) not in graph:
+            continue  # was deleted
         for raw_imp in extract_imports(fp):
             target = resolve_import(raw_imp, fp, lookup)
             if target is not None and str(target) != str(fp):
-                graph.add_edge(str(fp), str(target), label=raw_imp)
+                if str(target) in graph:
+                    graph.add_edge(str(fp), str(target), label=raw_imp)
+
+    # Detect circular imports and warn (but do not crash)
+    try:
+        cycle = nx.find_cycle(graph, orientation="original")
+        cycle_str = " → ".join(Path(edge[0]).name for edge in cycle)
+        _warn(f"Circular import detected: {cycle_str}")
+    except nx.NetworkXNoCycle:
+        pass
 
     return graph
 
