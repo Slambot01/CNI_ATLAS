@@ -23,12 +23,22 @@ import networkx as nx
 import typer
 
 from cni.analysis.explainer import explain_file, print_file_explanation, _resolve_node
+from cni.analysis.flow_tracer import detect_entry_points, trace_flow, format_flow_report, FlowReport
+from cni.analysis.health import compute_health, format_health_report
+from cni.analysis.impact import analyze_impact, format_impact_report
+from cni.analysis.onboarder import generate_onboarding_report, format_onboarding_report
 from cni.analysis.path_finder import find_dependency_path, print_dependency_path
 from cni.analyzer.repo_scanner import scan_repository
-from cni.graph.dependency_graph import build_dependency_graph, print_graph_stats
-from cni.graph.export import export_graph
+from cni.graph.dependency_graph import build_dependency_graph, merge_graphs, print_graph_stats
+from cni.graph.export import (
+    export_graph,
+    filter_graph_by_depth,
+    filter_graph_by_imports,
+    cluster_graph_by_directory,
+)
 from cni.llm.llm_client import ask_llm
 from cni.retrieval.context_builder import build_context
+from cni.retrieval.semantic_search import build_index, search_index
 from cni.storage.cache import is_cache_valid, load_cache, save_cache
 
 app = typer.Typer(
@@ -156,11 +166,28 @@ def graph(
         "-f",
         help="Output format: png, svg, or pdf.",
     ),
+    depth: int = typer.Option(
+        0,
+        "--depth",
+        help="Only show nodes within N hops from entry points (0 = no filter).",
+    ),
+    min_imports: int = typer.Option(
+        0,
+        "--min-imports",
+        help="Only show nodes imported by at least N other modules (0 = no filter).",
+    ),
+    cluster: bool = typer.Option(
+        False,
+        "--cluster",
+        help="Collapse directories into single nodes showing package-level dependencies.",
+    ),
 ) -> None:
     """Build the dependency graph, print stats, and export a graph image.
 
-    Generates a Graphviz-rendered image with directory-based clustering
-    and in-degree node coloring.
+    Supports filtering for large repos:
+      --depth N        Keep only nodes within N hops from entry points.
+      --min-imports N  Keep only nodes imported by at least N modules.
+      --cluster        Collapse files into directory-level nodes.
     """
     typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
 
@@ -171,9 +198,24 @@ def graph(
     typer.echo("")
     print_graph_stats(dep_graph)
 
+    # Apply filters
+    render_graph = dep_graph
+    if depth > 0:
+        render_graph = filter_graph_by_depth(render_graph, depth)
+        typer.echo(f"  Filtered by depth {depth}: {render_graph.number_of_nodes()} nodes")
+    if min_imports > 0:
+        render_graph = filter_graph_by_imports(render_graph, min_imports)
+        typer.echo(f"  Filtered by min-imports {min_imports}: {render_graph.number_of_nodes()} nodes")
+    if cluster:
+        render_graph = cluster_graph_by_directory(render_graph)
+        typer.echo(f"  Clustered by directory: {render_graph.number_of_nodes()} package nodes")
+
+    if render_graph.number_of_nodes() == 0:
+        _abort("No nodes remain after filtering. Try less aggressive filter values.")
+
     typer.echo("")
     try:
-        result_path = export_graph(dep_graph, output, fmt=fmt)
+        result_path = export_graph(render_graph, output, fmt=fmt)
         typer.echo(
             typer.style(f"✓ Graph exported to: {result_path}", fg=typer.colors.GREEN)
         )
@@ -361,6 +403,156 @@ def explain(
     print_file_explanation(explanation)
 
 
+def _suppress_model_noise() -> None:
+    """Suppress noisy model-loading output from sentence-transformers."""
+    import logging
+    import os
+
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+    try:
+        from transformers import logging as hf_logging
+        hf_logging.set_verbosity_error()
+    except ImportError:
+        pass
+
+
+@app.command()
+def flow(
+    concept: str = typer.Argument(
+        ...,
+        help="Business concept to trace (e.g. 'order processing').",
+    ),
+    path: Path = typer.Argument(
+        ".",
+        help="Repository root.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+) -> None:
+    """Trace execution flow for a business concept.
+
+    Detects entry points (API routes, tasks), finds semantically related
+    files, and traces the execution chain through the dependency graph.
+    """
+    _suppress_model_noise()
+
+    typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
+    file_paths = _scan(path)
+
+    typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
+    dep_graph = _build(file_paths)
+
+    typer.echo(typer.style("Detecting entry points...", fg=typer.colors.CYAN))
+    entry_points = detect_entry_points(file_paths)
+
+    typer.echo(typer.style("Searching for related files...", fg=typer.colors.CYAN))
+    build_index(file_paths)
+    related_files = search_index(concept, k=10)
+
+    typer.echo(typer.style("Tracing execution flow...", fg=typer.colors.CYAN))
+    chains = trace_flow(dep_graph, entry_points, related_files)
+
+    report = FlowReport(
+        query=concept,
+        entry_points=entry_points,
+        flow_chains=chains,
+    )
+
+    typer.echo(format_flow_report(report))
+
+
+@app.command()
+def impact(
+    file: str = typer.Argument(
+        ...,
+        help="File name or path to analyze impact for.",
+    ),
+    path_root: Path = typer.Argument(
+        ".",
+        help="Repository root.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+) -> None:
+    """Analyze the blast radius of modifying a file.
+
+    Shows direct and transitive dependents, scores them by criticality,
+    and classifies overall risk as LOW/MEDIUM/HIGH.
+    """
+    typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
+    file_paths = _scan(path_root)
+
+    typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
+    dep_graph = _build(file_paths)
+
+    resolved = _resolve_node(dep_graph, file)
+    if resolved is None:
+        _abort(f"File '{file}' not found in the dependency graph.")
+
+    typer.echo(typer.style("Analyzing impact...", fg=typer.colors.CYAN))
+    report = analyze_impact(dep_graph, resolved, file_paths)
+    typer.echo(format_impact_report(report))
+
+
+@app.command()
+def onboard(
+    path: Path = typer.Argument(
+        ".",
+        help="Repository root.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+) -> None:
+    """Generate an onboarding report for the codebase.
+
+    Detects entry points, ranks modules by centrality, flags dead modules,
+    and generates an LLM architecture summary.
+    """
+    typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
+    file_paths = _scan(path)
+
+    typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
+    dep_graph = _build(file_paths)
+
+    typer.echo(typer.style("Generating onboarding report...", fg=typer.colors.CYAN))
+    report = generate_onboarding_report(dep_graph, file_paths, llm_fn=ask_llm)
+    typer.echo(format_onboarding_report(report))
+
+
+@app.command()
+def health(
+    path: Path = typer.Argument(
+        ".",
+        help="Repository root.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+) -> None:
+    """Compute codebase health metrics.
+
+    Reports god modules, coupled modules, isolated files, and an
+    overall health score from 0 to 100.
+    """
+    typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
+    file_paths = _scan(path)
+
+    typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
+    dep_graph = _build(file_paths)
+
+    typer.echo(typer.style("Computing health metrics...", fg=typer.colors.CYAN))
+    report = compute_health(dep_graph)
+    typer.echo(format_health_report(report))
+
+
 @app.command()
 def ask(
     question: str = typer.Argument(
@@ -377,18 +569,7 @@ def ask(
     ),
 ) -> None:
     """Ask a natural language question about the codebase."""
-    import logging
-    import os
-
-    # Suppress noisy model-loading output from sentence-transformers
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
-    
-    try:
-        from transformers import logging as hf_logging
-        hf_logging.set_verbosity_error()
-    except ImportError:
-        pass
+    _suppress_model_noise()
 
     typer.echo("Scanning repository...")
     file_paths = _scan(path)
@@ -404,6 +585,73 @@ def ask(
 
     typer.echo()
     typer.echo(answer)
+
+
+@app.command()
+def connect(
+    paths: list[str] = typer.Argument(
+        ...,
+        help="Paths to repository roots to connect.",
+    ),
+) -> None:
+    """Connect multiple repositories for cross-service analysis.
+
+    Scans each repository independently, merges all graphs into a
+    unified cross-repo graph, and detects cross-service connections.
+    """
+    from pathlib import Path as _Path
+
+    if len(paths) < 2:
+        _abort("At least two repository paths are required.")
+
+    typer.echo(typer.style("Connecting repositories...\n", fg=typer.colors.CYAN))
+
+    repo_graphs: list[tuple[str, nx.DiGraph]] = []
+
+    for repo_path_str in paths:
+        repo_path = _Path(repo_path_str).resolve()
+        if not repo_path.is_dir():
+            _abort(f"Not a directory: {repo_path}")
+
+        repo_name = repo_path.name
+        typer.echo(f"  Scanning {repo_name}...")
+
+        try:
+            file_paths = scan_repository(str(repo_path))
+        except Exception as exc:
+            _abort(f"Failed to scan {repo_name}: {exc}")
+
+        if not file_paths:
+            typer.echo(f"    ⚠ No source files found in {repo_name}, skipping.")
+            continue
+
+        graph = build_dependency_graph(file_paths)
+        repo_graphs.append((repo_name, graph))
+
+        typer.echo(
+            f"  {repo_name:<25s} files: {graph.number_of_nodes():<6d} "
+            f"edges: {graph.number_of_edges()}"
+        )
+
+    if len(repo_graphs) < 2:
+        _abort("Need at least two valid repos to connect.")
+
+    typer.echo(typer.style("\nMerging graphs...", fg=typer.colors.CYAN))
+    unified, cross_connections = merge_graphs(repo_graphs)
+
+    if cross_connections:
+        typer.echo(f"\nCross-service connections detected: {len(cross_connections)}")
+        for src, tgt in cross_connections[:10]:
+            typer.echo(f"  {src}")
+            typer.echo(f"    → {tgt}")
+    else:
+        typer.echo("\nNo cross-service connections detected.")
+
+    typer.echo(
+        f"\n{typer.style('Unified graph built.', fg=typer.colors.GREEN)}"
+        f"\nTotal files: {unified.number_of_nodes()}    "
+        f"Total edges: {unified.number_of_edges()}"
+    )
 
 
 # ---------------------------------------------------------------------------

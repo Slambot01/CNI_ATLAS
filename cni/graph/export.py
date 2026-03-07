@@ -17,6 +17,97 @@ from graphviz import Digraph
 OutputFormat = Literal["png", "svg", "pdf"]
 
 
+# ---------------------------------------------------------------------------
+# Graph filtering helpers
+# ---------------------------------------------------------------------------
+
+def _detect_entry_points(graph: nx.DiGraph) -> list[str]:
+    """Return nodes with zero in-degree (likely entry points)."""
+    return [n for n in graph.nodes if graph.in_degree(n) == 0]
+
+
+def filter_graph_by_depth(graph: nx.DiGraph, depth: int) -> nx.DiGraph:
+    """Keep only nodes within *depth* hops from detected entry points.
+
+    Entry points are nodes with zero in-degree.  A BFS is performed from
+    each entry point and only nodes reachable within *depth* hops are
+    retained in the returned subgraph.
+
+    Args:
+        graph: Directed dependency graph.
+        depth: Maximum number of hops from any entry point.
+
+    Returns:
+        A new DiGraph containing only the filtered nodes and their edges.
+    """
+    entry_points = _detect_entry_points(graph)
+    if not entry_points:
+        # Fall back to using all nodes if no clear entry points exist
+        return graph.copy()
+
+    keep: set[str] = set()
+    for ep in entry_points:
+        for node, dist in nx.single_source_shortest_path_length(graph, ep, cutoff=depth).items():
+            keep.add(node)
+
+    return graph.subgraph(keep).copy()
+
+
+def filter_graph_by_imports(graph: nx.DiGraph, min_imports: int) -> nx.DiGraph:
+    """Keep only nodes imported by at least *min_imports* other modules.
+
+    Nodes with in-degree below the threshold are removed, along with any
+    edges touching them.
+
+    Args:
+        graph:       Directed dependency graph.
+        min_imports: Minimum in-degree a node must have to be retained.
+
+    Returns:
+        A new DiGraph containing only hub modules.
+    """
+    keep = {n for n in graph.nodes if graph.in_degree(n) >= min_imports}
+    return graph.subgraph(keep).copy()
+
+
+def cluster_graph_by_directory(graph: nx.DiGraph) -> nx.DiGraph:
+    """Collapse files into directory-level nodes.
+
+    Every file node is replaced by its parent directory.  Edges between
+    files in different directories become edges between the directory
+    nodes.  Self-loops (intra-directory edges) are dropped.
+
+    Args:
+        graph: Directed dependency graph (nodes = file paths).
+
+    Returns:
+        A new DiGraph where nodes represent directories and edges
+        represent cross-directory dependencies.
+    """
+    clustered = nx.DiGraph()
+
+    for node in graph.nodes:
+        directory = str(Path(node).parent)
+        if not clustered.has_node(directory):
+            clustered.add_node(directory, file_count=0)
+        clustered.nodes[directory]["file_count"] = (
+            clustered.nodes[directory].get("file_count", 0) + 1
+        )
+
+    for u, v in graph.edges:
+        src_dir = str(Path(u).parent)
+        tgt_dir = str(Path(v).parent)
+        if src_dir != tgt_dir:
+            if clustered.has_edge(src_dir, tgt_dir):
+                clustered[src_dir][tgt_dir]["weight"] = (
+                    clustered[src_dir][tgt_dir].get("weight", 0) + 1
+                )
+            else:
+                clustered.add_edge(src_dir, tgt_dir, weight=1)
+
+    return clustered
+
+
 def export_graph(
     graph: nx.DiGraph,
     output_file: str,

@@ -186,3 +186,83 @@ def search_index(
     top_indices = np.argsort(scores)[-n:][::-1]
 
     return [target.file_paths[i] for i in top_indices]
+
+
+# ---------------------------------------------------------------------------
+# Function-level index (Problem 6)
+# ---------------------------------------------------------------------------
+
+_fn_index: SemanticIndex | None = None
+_fn_units: list[dict] = []
+
+
+def build_function_index(
+    units: list[dict],
+    model_name: str = DEFAULT_MODEL,
+) -> None:
+    """Build a semantic index over function/class units.
+
+    Each unit's ``source`` field is embedded instead of reading whole files.
+
+    Args:
+        units:      List of dicts from :func:`extract_functions`.
+        model_name: HuggingFace model name.
+    """
+    global _fn_index, _fn_units
+
+    if not units:
+        _fn_index = None
+        _fn_units = []
+        return
+
+    model = SentenceTransformer(model_name)
+
+    texts: list[str] = []
+    for u in units:
+        header = f"# {u['name']} in {Path(u['file_path']).name}\n"
+        text = (header + u.get("source", ""))[:MAX_FILE_CHARS]
+        texts.append(text)
+
+    embeddings: np.ndarray = model.encode(
+        texts,
+        batch_size=32,
+        show_progress_bar=len(texts) > 50,
+        convert_to_numpy=True,
+        normalize_embeddings=False,
+    )
+
+    _fn_index = SemanticIndex(
+        model=model,
+        file_paths=[u["file_path"] for u in units],
+        embeddings=embeddings.astype(np.float32),
+    )
+    _fn_units = list(units)
+
+
+def search_function_index(query: str, k: int = 10) -> list[dict]:
+    """Return the top-*k* most relevant function units for *query*.
+
+    Args:
+        query: Natural language query string.
+        k:     Maximum number of results.
+
+    Returns:
+        List of function unit dicts ordered by descending similarity.
+        Empty list if no function index has been built.
+    """
+    if _fn_index is None or _fn_index.is_empty or not _fn_units:
+        return []
+
+    if not query.strip():
+        return []
+
+    query_vec: np.ndarray = _fn_index.model.encode(
+        query,
+        convert_to_numpy=True,
+        normalize_embeddings=False,
+    ).astype(np.float32)
+
+    scores = _cosine_similarity(query_vec, _fn_index.embeddings)
+    top_indices = np.argsort(scores)[-k:][::-1]
+
+    return [_fn_units[i] for i in top_indices if i < len(_fn_units)]

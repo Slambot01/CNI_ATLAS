@@ -302,6 +302,92 @@ def print_graph_stats(graph: nx.DiGraph) -> None:
     print(f"  Isolated files    : {stats['isolated']}")
     print(f"  Most imported     : {stats['most_imported']} dependents")
 
+# ---------------------------------------------------------------------------
+# Multi-repo graph merging (Problem 7)
+# ---------------------------------------------------------------------------
+
+def merge_graphs(
+    repo_graphs: list[tuple[str, nx.DiGraph]],
+) -> tuple[nx.DiGraph, list[tuple[str, str]]]:
+    """Merge multiple repo graphs into a unified cross-repo graph.
+
+    Each repo's nodes are prefixed with the repo name to avoid collisions.
+    Cross-service connections are detected by matching shared module names
+    and API client import patterns.
+
+    Args:
+        repo_graphs: List of ``(repo_name, graph)`` tuples.
+
+    Returns:
+        Tuple of ``(unified_graph, cross_connections)`` where
+        cross_connections is a list of ``(source_node, target_node)`` pairs.
+    """
+    unified = nx.DiGraph()
+
+    # Pass 1: Add all nodes and edges with repo-prefixed names
+    node_map: dict[str, str] = {}
+    for repo_name, graph in repo_graphs:
+        for node in graph.nodes:
+            prefixed = f"{repo_name}/{Path(node).name}"
+            node_map[node] = prefixed
+            unified.add_node(prefixed, repo=repo_name, original_path=node)
+
+        for u, v, data in graph.edges(data=True):
+            unified.add_edge(node_map[u], node_map[v], **data)
+
+    # Pass 2: Detect cross-service connections
+    cross_connections = _detect_cross_service(repo_graphs, unified)
+
+    return unified, cross_connections
+
+
+def _detect_cross_service(
+    repo_graphs: list[tuple[str, nx.DiGraph]],
+    unified: nx.DiGraph,
+) -> list[tuple[str, str]]:
+    """Detect connections between repositories.
+
+    Strategies:
+      1. Shared module names across repos.
+      2. API client patterns (files named ``*_client.py``).
+    """
+    connections: list[tuple[str, str]] = []
+
+    # module_name -> list of prefixed nodes
+    name_to_nodes: dict[str, list[str]] = {}
+    for node in unified.nodes:
+        base_name = Path(node).stem
+        name_to_nodes.setdefault(base_name, []).append(node)
+
+    # Strategy 1: shared module names
+    for nodes in name_to_nodes.values():
+        repos_seen: set[str] = set()
+        for node in nodes:
+            repos_seen.add(unified.nodes[node].get("repo", ""))
+        if len(repos_seen) > 1:
+            for i, n1 in enumerate(nodes):
+                for n2 in nodes[i + 1:]:
+                    r1 = unified.nodes[n1].get("repo", "")
+                    r2 = unified.nodes[n2].get("repo", "")
+                    if r1 != r2 and not unified.has_edge(n1, n2):
+                        unified.add_edge(n1, n2, label="shared_module")
+                        connections.append((n1, n2))
+
+    # Strategy 2: client pattern
+    for node in list(unified.nodes):
+        name = Path(node).stem
+        if name.endswith("_client") or "client" in name.lower():
+            service_name = name.replace("_client", "").replace("client", "")
+            if service_name and service_name in name_to_nodes:
+                for target in name_to_nodes[service_name]:
+                    src_repo = unified.nodes[node].get("repo", "")
+                    tgt_repo = unified.nodes[target].get("repo", "")
+                    if src_repo != tgt_repo and not unified.has_edge(node, target):
+                        unified.add_edge(node, target, label="api_client")
+                        connections.append((node, target))
+
+    return connections
+
 
 # ---------------------------------------------------------------------------
 # Quick smoke-test
