@@ -16,6 +16,7 @@ from pathlib import Path
 
 import typer
 
+from cni.analysis.path_finder import find_dependency_path, print_dependency_path
 from cni.analyzer.repo_scanner import scan_repository
 from cni.graph.dependency_graph import build_dependency_graph, print_graph_stats
 
@@ -36,12 +37,8 @@ def _abort(message: str) -> None:
     raise typer.Exit(code=1)
 
 
-# ---------------------------------------------------------------------------
-# Commands
-# ---------------------------------------------------------------------------
-
-def _scan_and_build_graph(path: Path) -> tuple[list[str], object]:
-    """Shared logic for scanning and building graph."""
+def _scan(path: Path) -> list[str]:
+    """Scan repository for supported source files."""
     try:
         file_paths: list[str] = scan_repository(str(path))
     except Exception as exc:  # noqa: BLE001
@@ -53,11 +50,23 @@ def _scan_and_build_graph(path: Path) -> tuple[list[str], object]:
             "Currently supported: .py, .js, .ts, .jsx, .tsx"
         )
 
+    return file_paths
+
+
+def _build(file_paths: list[str]) -> object:
+    """Build dependency graph from file paths."""
     try:
         graph = build_dependency_graph(file_paths)
     except Exception as exc:  # noqa: BLE001
         _abort(f"Failed to build dependency graph: {exc}")
 
+    return graph
+
+
+def _scan_and_build_graph(path: Path) -> tuple[list[str], object]:
+    """Shared logic for scanning and building graph."""
+    file_paths = _scan(path)
+    graph = _build(file_paths)
     return file_paths, graph
 
 
@@ -227,6 +236,46 @@ def visualize(
 
     except Exception as exc:  # noqa: BLE001
         _abort(f"Failed to generate visualization: {exc}")
+
+
+@app.command()
+def path(
+    source: str = typer.Argument(
+        ...,
+        help="Source file name or path.",
+    ),
+    target: str = typer.Argument(
+        ...,
+        help="Target file name or path.",
+    ),
+    path_root: Path = typer.Argument(
+        ...,
+        help="Repository root.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+) -> None:
+    """
+    Find the dependency path between two files.
+
+    Shows whether file A depends on file B and the chain of dependencies
+    connecting them, if one exists.
+    """
+    typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
+
+    file_paths = _scan(path_root)
+
+    typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
+
+    graph = _build(file_paths)
+
+    typer.echo(typer.style("Searching dependency path...", fg=typer.colors.CYAN))
+
+    dep_path = find_dependency_path(graph, source, target)
+
+    print_dependency_path(dep_path)
 
 
 # ---------------------------------------------------------------------------
