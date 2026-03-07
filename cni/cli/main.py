@@ -20,6 +20,8 @@ from cni.analysis.explainer import explain_file, print_file_explanation
 from cni.analysis.path_finder import find_dependency_path, print_dependency_path
 from cni.analyzer.repo_scanner import scan_repository
 from cni.graph.dependency_graph import build_dependency_graph, print_graph_stats
+from cni.llm.llm_client import ask_llm
+from cni.retrieval.context_builder import get_relevant_files
 
 app = typer.Typer(
     name="cni",
@@ -70,6 +72,42 @@ def _scan_and_build_graph(path: Path) -> tuple[list[str], object]:
     graph = _build(file_paths)
     return file_paths, graph
 
+
+def _build_context(files: list[str], max_lines: int = 50) -> str:
+    """
+    Build a context string from a list of file paths.
+
+    Each file is prefixed with its path and limited to max_lines.
+
+    Args:
+        files:     List of file paths to read.
+        max_lines: Maximum number of lines to read from each file.
+
+    Returns:
+        A formatted string containing the file contents.
+    """
+    context_parts: list[str] = []
+
+    for file_path in files:
+        try:
+            path_obj = Path(file_path)
+            if path_obj.exists() and path_obj.is_file():
+                content = path_obj.read_text(encoding="utf-8", errors="replace")
+                lines = content.splitlines()
+                truncated = "\n".join(lines[:max_lines])
+                if len(lines) > max_lines:
+                    truncated += f"\n... ({len(lines) - max_lines} more lines)"
+
+                context_parts.append(f"FILE: {file_path}\n{truncated}")
+        except Exception as exc:  # noqa: BLE001
+            context_parts.append(f"FILE: {file_path}\n[Error reading file: {exc}]")
+
+    return "\n\n".join(context_parts)
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
 
 @app.command()
 def analyze(
@@ -315,6 +353,74 @@ def explain(
     explanation = explain_file(graph, file)
 
     print_file_explanation(explanation)
+
+
+@app.command()
+def ask(
+    question: str = typer.Argument(
+        ...,
+        help="Question about the codebase.",
+    ),
+    path_root: Path = typer.Argument(
+        ...,
+        help="Repository root.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+) -> None:
+    """
+    Ask a question about your codebase using an LLM.
+
+    Workflow:
+      1. Scan repository for files
+      2. Build dependency graph
+      3. Retrieve relevant files based on question
+      4. Send context to LLM (Ollama)
+      5. Print the answer
+
+    Requires Ollama running at http://localhost:11434
+    """
+    typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
+
+    file_paths = _scan(path_root)
+
+    typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
+
+    graph = _build(file_paths)
+
+    typer.echo(typer.style("Retrieving relevant files...", fg=typer.colors.CYAN))
+
+    relevant_files = get_relevant_files(graph, question, top_n=5)
+
+    if not relevant_files:
+        typer.echo(
+            typer.style(
+                "Warning: No relevant files found for your question.",
+                fg=typer.colors.YELLOW,
+            )
+        )
+        relevant_files = file_paths[:3]  # Fallback to first 3 files
+
+    typer.echo(f"Using {len(relevant_files)} file(s) as context")
+    typer.echo(typer.style("Querying LLM...", fg=typer.colors.CYAN))
+
+    context = _build_context(relevant_files, max_lines=50)
+
+    answer = ask_llm(context, question)
+
+    typer.echo("")
+    if answer:
+        typer.echo(typer.style("Answer:", fg=typer.colors.GREEN, bold=True))
+        typer.echo(answer)
+    else:
+        typer.echo(
+            typer.style(
+                "Error: Could not get response from LLM.",
+                fg=typer.colors.RED,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
