@@ -20,7 +20,8 @@ from typing import Optional
 
 def _cache_path(repo_path: str) -> Path:
     """Return the absolute path to the cache file for *repo_path*."""
-    return Path(repo_path).resolve() / ".cni" / "cache.json"
+    from cni.utils.platform import get_cache_dir
+    return get_cache_dir(repo_path) / "cache.json"
 
 
 def _file_mtime(file_path: str) -> float:
@@ -65,8 +66,7 @@ def save_cache(
         "edges": [list(e) for e in edges],
         "mtimes": mtimes,
     }
-
-    cache_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    cache_file.write_text(json.dumps(data, indent=2), encoding="utf-8", errors="replace")
 
 
 def load_cache(
@@ -87,7 +87,7 @@ def load_cache(
         return None
 
     try:
-        data = json.loads(cache_file.read_text(encoding="utf-8"))
+        data = json.loads(cache_file.read_text(encoding="utf-8", errors="replace"))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -128,7 +128,7 @@ def is_cache_valid(
         return False
 
     try:
-        data = json.loads(cache_file.read_text(encoding="utf-8"))
+        data = json.loads(cache_file.read_text(encoding="utf-8", errors="replace"))
     except (json.JSONDecodeError, OSError):
         return False
 

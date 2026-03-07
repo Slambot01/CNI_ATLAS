@@ -227,15 +227,14 @@ def export_graph(
         )
     except FileNotFoundError:
         # Graphviz binary ("dot") is not installed on the system
-        import sys
-        sys.stderr.write(
-            "\033[31m✗  Graphviz is not installed on your system.\033[0m\n"
-            "   Install it with:\n"
+        from cni.utils.errors import abort
+        abort(
+            "Graphviz is not installed on your system.",
+            "Install it with:\n"
             "     macOS:   brew install graphviz\n"
             "     Ubuntu:  sudo apt install graphviz\n"
-            "     Windows: https://graphviz.org/download/\n"
+            "     Windows: https://graphviz.org/download/",
         )
-        raise SystemExit(1) from None
     except Exception as exc:
         raise RuntimeError(
             f"Graphviz rendering failed. Is Graphviz installed on your system?\n"

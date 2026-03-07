@@ -19,7 +19,6 @@ Edge cases handled:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import networkx as nx
@@ -31,6 +30,7 @@ from cni.retrieval.semantic_search import (
     search_function_index,
     search_index,
 )
+from cni.utils.errors import warning
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -39,8 +39,7 @@ from cni.retrieval.semantic_search import (
 MAX_CONTEXT_CHARS: int = 12_000
 """Hard limit on the total context string sent to the LLM."""
 
-# Common English stopwords — a query consisting entirely of these is too
-# generic to produce useful semantic search results.
+# Common English stopwords
 _STOPWORDS: set[str] = {
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "do", "does", "did", "will", "would", "shall",
@@ -51,11 +50,6 @@ _STOPWORDS: set[str] = {
     "of", "at", "by", "for", "with", "about", "to", "from", "in", "on",
     "up", "out", "into", "all", "so", "than",
 }
-
-
-def _warn(message: str) -> None:
-    """Print a yellow warning to stderr."""
-    sys.stderr.write(f"\033[33m⚠  {message}\033[0m\n")
 
 
 def _is_stopword_only(query: str) -> bool:
@@ -72,10 +66,6 @@ def _is_stopword_only(query: str) -> bool:
 def build_context(graph: nx.DiGraph, query: str) -> str:
     """Build a context string from the most semantically relevant code.
 
-    Attempts function-level indexing first (for precise, focused context).
-    Falls back to file-level indexing if no function units can be
-    extracted (e.g. for JS/TS repos or empty graphs).
-
     Args:
         graph: Directed dependency graph (nodes = file path strings).
         query: Natural language query/question from the user.
@@ -91,7 +81,7 @@ def build_context(graph: nx.DiGraph, query: str) -> str:
 
     # Stopword-only guard
     if _is_stopword_only(query):
-        _warn("Query too generic. Try being more specific.")
+        warning("Query too generic. Try being more specific.")
         return ""
 
     file_paths: list[str] = list(graph.nodes)
@@ -126,7 +116,7 @@ def build_context(graph: nx.DiGraph, query: str) -> str:
         relevant_files = []
 
     if not relevant_files:
-        _warn("No readable files found for this query.")
+        warning("No readable files found for this query.")
         return ""
 
     return _format_file_context(relevant_files)
@@ -166,7 +156,7 @@ def _format_file_context(file_paths: list[str]) -> str:
             pass
 
     if not parts:
-        _warn("No readable files found for this query.")
+        warning("No readable files found for this query.")
         return ""
 
     combined = "\n\n".join(parts)

@@ -41,6 +41,8 @@ from cni.llm.llm_client import ask_llm
 from cni.retrieval.context_builder import build_context
 from cni.retrieval.semantic_search import build_index, search_index
 from cni.storage.cache import is_cache_valid, load_cache, save_cache
+from cni.utils.errors import abort, error, success, warning
+from cni.utils.platform import get_cache_dir, get_platform
 
 app = typer.Typer(
     name="cni",
@@ -55,8 +57,7 @@ app = typer.Typer(
 
 def _abort(message: str) -> None:
     """Print an error message in red and exit with code 1."""
-    typer.echo(typer.style(f"Error: {message}", fg=typer.colors.RED), err=True)
-    raise typer.Exit(code=1)
+    abort(message)
 
 
 def _scan(path: Path) -> list[str]:
@@ -122,7 +123,7 @@ def analyze(
     file_paths = _scan(path)
 
     if is_cache_valid(repo_str, file_paths):
-        typer.echo(typer.style("Cache hit — loading cached results.", fg=typer.colors.GREEN))
+        success("Cache hit — loading cached results.")
         cached = load_cache(repo_str)
         if cached is not None:
             cached_files, cached_edges = cached
@@ -139,7 +140,7 @@ def analyze(
         save_cache(repo_str, file_paths, list(graph.edges()))
 
     typer.echo(f"Files scanned: {typer.style(str(len(file_paths)), bold=True)}")
-    typer.echo(typer.style("Dependency graph built.", fg=typer.colors.GREEN))
+    success("Dependency graph built.")
 
     print_graph_stats(graph)
 
@@ -715,8 +716,16 @@ def doctor() -> None:
             "brew install graphviz"
         )
 
+    # Windows-specific note
+    if get_platform() == "windows":
+        warning(
+            "On Windows, Graphviz must be added to PATH manually "
+            "after installation.\n"
+            "   Download from: https://graphviz.org/download/"
+        )
+
     # --- 4. Cache present? ----------------------------------------------
-    cache_path = Path(".cni") / "cache.json"
+    cache_path = get_cache_dir(".") / "cache.json"
     if cache_path.exists():
         typer.echo(f"  {ok}  Cache found: .cni/cache.json")
     else:

@@ -10,15 +10,12 @@ from __future__ import annotations
 import ast
 import os
 import re
-import sys
 from pathlib import Path
 
 import networkx as nx
 
+from cni.utils.errors import warning
 
-def _warn(message: str) -> None:
-    """Print a yellow warning to stderr."""
-    sys.stderr.write(f"\033[33m⚠  {message}\033[0m\n")
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +249,7 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
     # Add every file as a node (skip deleted files)
     for fp in paths:
         if not fp.exists():
-            _warn(f"File deleted since scan: {fp.name} — skipping")
+            warning(f"File deleted since scan: {fp.name} — skipping")
             continue
         graph.add_node(
             str(fp),
@@ -274,7 +271,7 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
     try:
         cycle = nx.find_cycle(graph, orientation="original")
         cycle_str = " → ".join(Path(edge[0]).name for edge in cycle)
-        _warn(f"Circular import detected: {cycle_str}")
+        warning(f"Circular import detected: {cycle_str}")
     except nx.NetworkXNoCycle:
         pass
 
@@ -352,7 +349,7 @@ def merge_graphs(
     node_map: dict[str, str] = {}
     for repo_name, graph in repo_graphs:
         for node in graph.nodes:
-            prefixed = f"{repo_name}/{Path(node).name}"
+            prefixed = normalize_path(str(Path(repo_name) / Path(node).name))
             node_map[node] = prefixed
             unified.add_node(prefixed, repo=repo_name, original_path=node)
 
@@ -375,6 +372,8 @@ def _detect_cross_service(
       1. Shared module names across repos.
       2. API client patterns (files named ``*_client.py``).
     """
+    from cni.utils.platform import normalize_path
+    
     connections: list[tuple[str, str]] = []
 
     # module_name -> list of prefixed nodes
