@@ -16,6 +16,7 @@ from pathlib import Path
 
 import typer
 
+from cni.analysis.explainer import explain_file, print_file_explanation
 from cni.analysis.path_finder import find_dependency_path, print_dependency_path
 from cni.analyzer.repo_scanner import scan_repository
 from cni.graph.dependency_graph import build_dependency_graph, print_graph_stats
@@ -276,6 +277,44 @@ def path(
     dep_path = find_dependency_path(graph, source, target)
 
     print_dependency_path(dep_path)
+
+
+@app.command()
+def explain(
+    file: str = typer.Argument(
+        ...,
+        help="File name or path to explain.",
+    ),
+    path_root: Path = typer.Argument(
+        ...,
+        help="Repository root.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+) -> None:
+    """
+    Explain how a file participates in the dependency graph.
+
+    Shows:
+      - Files that this file imports
+      - Files that import this file
+    """
+    typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
+
+    file_paths = _scan(path_root)
+
+    typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
+
+    graph = _build(file_paths)
+
+    typer.echo(typer.style("Analyzing file...", fg=typer.colors.CYAN))
+    typer.echo("")
+
+    explanation = explain_file(graph, file)
+
+    print_file_explanation(explanation)
 
 
 # ---------------------------------------------------------------------------
