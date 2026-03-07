@@ -1,47 +1,59 @@
-import os
-import ast
-from typing import List
+"""
+cni/analyzer/repo_scanner.py
 
-def scan_repository(path: str) -> List[str]:
-    """
-    Recursively scan the repository and detect Python (.py) and JavaScript (.js/.ts) files.
+Recursively scan a repository for supported source files and extract
+import statements from Python modules.
+"""
+
+from __future__ import annotations
+
+import ast
+import os
+from pathlib import Path
+
+# Directories to skip during recursive scanning
+_IGNORE_DIRS: set[str] = {".git", "node_modules", "__pycache__", ".cni"}
+
+
+def scan_repository(path: str) -> list[str]:
+    """Recursively scan *path* for Python, JavaScript, and TypeScript files.
 
     Args:
-        path (str): The path to the repository.
+        path: Absolute or relative path to the repository root.
 
     Returns:
-        List[str]: A list of file paths.
+        List of absolute file path strings for every discovered source file.
     """
-    file_paths = []
-    ignore_dirs = {'.git', 'node_modules', '__pycache__'}
+    file_paths: list[str] = []
 
     for root, dirs, files in os.walk(path):
-        dirs[:] = [d for d in dirs if d not in ignore_dirs]
+        dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS]
         for file in files:
-            if file.endswith('.py') or file.endswith('.js') or file.endswith('.ts'):
+            if file.endswith((".py", ".js", ".ts", ".jsx", ".tsx")):
                 file_paths.append(os.path.join(root, file))
 
     return file_paths
 
-def extract_imports(file_path: str) -> List[str]:
-    """
-    Extract all import statements from a Python file.
+
+def extract_imports(file_path: str) -> list[str]:
+    """Extract all import statements from a Python file.
 
     Args:
-        file_path (str): The path to the Python file.
+        file_path: Absolute or relative path to a ``.py`` file.
 
     Returns:
-        List[str]: A list of imported modules.
+        List of imported module name strings.
     """
-    with open(file_path, 'r') as file:
-        tree = ast.parse(file.read())
+    source = Path(file_path).read_text(encoding="utf-8", errors="replace")
+    tree = ast.parse(source)
 
-    imports = []
+    imports: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imports.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            imports.append(node.module)
+            if node.module:
+                imports.append(node.module)
 
     return imports

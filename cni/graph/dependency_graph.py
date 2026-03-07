@@ -11,7 +11,6 @@ import ast
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
 
 import networkx as nx
 
@@ -20,14 +19,14 @@ import networkx as nx
 # Language support config — easy to extend later
 # ---------------------------------------------------------------------------
 
-SUPPORTED_EXTENSIONS: Set[str] = {".py", ".js", ".ts", ".jsx", ".tsx"}
+SUPPORTED_EXTENSIONS: set[str] = {".py", ".js", ".ts", ".jsx", ".tsx"}
 
 
 # ---------------------------------------------------------------------------
 # Import extraction
 # ---------------------------------------------------------------------------
 
-def _extract_python_imports(file_path: Path) -> List[str]:
+def _extract_python_imports(file_path: Path) -> list[str]:
     """
     Parse a Python file with the built-in AST and return a list of
     raw module names that are imported.
@@ -39,7 +38,7 @@ def _extract_python_imports(file_path: Path) -> List[str]:
     except SyntaxError:
         return []
 
-    modules: List[str] = []
+    modules: list[str] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -65,7 +64,7 @@ _JS_IMPORT_RE = re.compile(
 )
 
 
-def _extract_js_imports(file_path: Path) -> List[str]:
+def _extract_js_imports(file_path: Path) -> list[str]:
     """
     Extract import/require paths from JS/TS files using regex.
     Returns raw specifiers as written in source (e.g. './utils/auth').
@@ -78,7 +77,7 @@ def _extract_js_imports(file_path: Path) -> List[str]:
     return _JS_IMPORT_RE.findall(source)
 
 
-def extract_imports(file_path: Path) -> List[str]:
+def extract_imports(file_path: Path) -> list[str]:
     """Dispatch to the correct extractor based on file extension."""
     ext = file_path.suffix.lower()
     if ext == ".py":
@@ -92,7 +91,7 @@ def extract_imports(file_path: Path) -> List[str]:
 # Import → file-path resolution
 # ---------------------------------------------------------------------------
 
-def _build_lookup(file_paths: List[Path]) -> Dict[str, Path]:
+def _build_lookup(file_paths: list[Path]) -> dict[str, Path]:
     """
     Build a mapping from every reasonable lookup key to an absolute Path.
 
@@ -101,7 +100,7 @@ def _build_lookup(file_paths: List[Path]) -> Dict[str, Path]:
       • path relative to each parent (for package-style lookups)
       • dot-notation module name  (e.g. 'utils.auth')
     """
-    lookup: Dict[str, Path] = {}
+    lookup: dict[str, Path] = {}
 
     for fp in file_paths:
         fp = fp.resolve()
@@ -128,8 +127,8 @@ def _build_lookup(file_paths: List[Path]) -> Dict[str, Path]:
 def _resolve_python_import(
     module: str,
     source_file: Path,
-    lookup: Dict[str, Path],
-) -> Optional[Path]:
+    lookup: dict[str, Path],
+) -> Path | None:
     """
     Try to map a Python import string to a file in the repository.
 
@@ -171,8 +170,8 @@ def _resolve_python_import(
 def _resolve_js_import(
     specifier: str,
     source_file: Path,
-    lookup: Dict[str, Path],
-) -> Optional[Path]:
+    lookup: dict[str, Path],
+) -> Path | None:
     """
     Resolve a JS/TS import specifier to a file.
     Only resolves relative imports (starting with ./ or ../).
@@ -199,8 +198,8 @@ def _resolve_js_import(
 def resolve_import(
     raw_import: str,
     source_file: Path,
-    lookup: Dict[str, Path],
-) -> Optional[Path]:
+    lookup: dict[str, Path],
+) -> Path | None:
     """Unified resolver — dispatches by source file extension."""
     ext = source_file.suffix.lower()
     if ext == ".py":
@@ -214,7 +213,7 @@ def resolve_import(
 # Graph construction
 # ---------------------------------------------------------------------------
 
-def build_dependency_graph(file_paths: List[str]) -> nx.DiGraph:
+def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
     """
     Build a directed dependency graph for the given repository files.
 
@@ -228,7 +227,7 @@ def build_dependency_graph(file_paths: List[str]) -> nx.DiGraph:
         nx.DiGraph with all resolved intra-repo dependencies.
     """
     # Normalise to Path objects, filter to supported extensions
-    paths: List[Path] = [
+    paths: list[Path] = [
         Path(p).resolve()
         for p in file_paths
         if Path(p).suffix.lower() in SUPPORTED_EXTENSIONS
@@ -262,7 +261,7 @@ def build_dependency_graph(file_paths: List[str]) -> nx.DiGraph:
 # Graph statistics  (used by `cni stats`)
 # ---------------------------------------------------------------------------
 
-def get_graph_stats(graph: nx.DiGraph) -> Dict[str, int]:
+def get_graph_stats(graph: nx.DiGraph) -> dict[str, int]:
     """
     Return a dictionary of graph statistics.
 

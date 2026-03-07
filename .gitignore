@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.cni/
+*.png
+test_graph
+my_repo_graph
+generated_graph

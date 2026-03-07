@@ -1,11 +1,13 @@
 """
-graph/export.py
+cni/graph/export.py
 
-Exports a NetworkX dependency graph to PNG (or any Graphviz-supported format).
+Exports a NetworkX dependency graph to PNG (or any Graphviz-supported
+format) with directory-based subgraph clustering and in-degree coloring.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from pathlib import Path
 from typing import Literal
 
@@ -21,17 +23,35 @@ def export_graph(
     fmt: OutputFormat = "png",
     cleanup: bool = True,
 ) -> Path:
-    """
-    Export a dependency graph to an image file using Graphviz.
+    """Export a dependency graph to an image file using Graphviz.
+
+    Enhancements over the original version:
+
+    * **Cluster by directory** — files in the same parent directory are
+      grouped into a Graphviz ``subgraph cluster_*``.
+    * **In-degree coloring** — nodes are colored based on how many other
+      files depend on them:
+
+      - 0 dependents  → white (``#ffffff``)
+      - 1–4 dependents → light blue (``#d0e8ff``)
+      - 5+ dependents  → red (``#ffcccc``)
+
+    * **Filename-only labels** — node labels show only the file name.
+    * **Edge labels** — if the graph builder stored the raw import string
+      in the edge's ``label`` attribute, it is shown on the edge.
+    * **Left-to-right layout** (``rankdir=LR``).
 
     Args:
         graph:       Directed dependency graph (nodes = file path strings).
-        output_file: Destination path WITHOUT extension (Graphviz appends it).
-        fmt:         Output format — 'png', 'svg', or 'pdf'. Defaults to 'png'.
-        cleanup:     Remove the intermediate .dot source file after rendering.
+        output_file: Destination path **without** extension (Graphviz
+                     appends it automatically).
+        fmt:         Output format — ``'png'``, ``'svg'``, or ``'pdf'``.
+                     Defaults to ``'png'``.
+        cleanup:     Remove the intermediate ``.dot`` source file after
+                     rendering.
 
     Returns:
-        Path to the rendered output file.
+        :class:`~pathlib.Path` to the rendered output file.
 
     Raises:
         ValueError:  If the graph is empty.
@@ -41,25 +61,37 @@ def export_graph(
         raise ValueError("Cannot export an empty graph.")
 
     # ------------------------------------------------------------------ #
-    # Deduplicate stems — 'utils/auth.py' and 'core/auth.py' both become
-    # 'auth', which causes silent node collisions in the original code.
-    # Use the last two path components as a readable but unique label.
+    # Colour helper
     # ------------------------------------------------------------------ #
-    def _node_label(node: str) -> str:
-        parts = Path(node).parts
-        return "/".join(parts[-2:]) if len(parts) >= 2 else Path(node).name
+    def _node_color(node: str) -> str:
+        in_deg: int = graph.in_degree(node)
+        if in_deg >= 5:
+            return "#ffcccc"
+        if in_deg >= 1:
+            return "#d0e8ff"
+        return "#ffffff"
 
+    # ------------------------------------------------------------------ #
+    # Group nodes by parent directory
+    # ------------------------------------------------------------------ #
+    dir_groups: dict[str, list[str]] = defaultdict(list)
+    for node in graph.nodes:
+        parent = str(Path(node).parent)
+        dir_groups[parent].append(node)
+
+    # ------------------------------------------------------------------ #
+    # Build the Digraph
+    # ------------------------------------------------------------------ #
     dot = Digraph(
         comment="CNI Dependency Graph",
         graph_attr={
-            "rankdir": "LR",       # left-to-right is easier to read
+            "rankdir": "LR",
             "fontsize": "12",
             "splines": "ortho",
         },
         node_attr={
             "shape": "box",
             "style": "filled",
-            "fillcolor": "#f0f4ff",
             "fontname": "Helvetica",
             "fontsize": "11",
         },
@@ -69,17 +101,24 @@ def export_graph(
         },
     )
 
-    # Add nodes
-    for node in graph.nodes:
-        label = _node_label(node)
-        # Highlight highly-depended-upon nodes
-        in_deg = graph.in_degree(node)
-        fill = "#ffd6d6" if in_deg >= 5 else "#f0f4ff"
-        dot.node(node, label=label, fillcolor=fill)
+    # Add nodes inside subgraph clusters grouped by directory
+    for idx, (directory, nodes) in enumerate(sorted(dir_groups.items())):
+        with dot.subgraph(name=f"cluster_{idx}") as sub:
+            sub.attr(
+                label=directory,
+                style="dashed",
+                color="#888888",
+                fontsize="10",
+                fontname="Helvetica",
+            )
+            for node in nodes:
+                label = Path(node).name
+                fill = _node_color(node)
+                sub.node(node, label=label, fillcolor=fill)
 
-    # Add edges
+    # Add edges with import-string labels
     for u, v, data in graph.edges(data=True):
-        edge_label = data.get("label", "")
+        edge_label: str = data.get("label", "")
         dot.edge(u, v, label=edge_label)
 
     # ------------------------------------------------------------------ #
@@ -89,7 +128,7 @@ def export_graph(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        rendered = dot.render(
+        rendered: str = dot.render(
             filename=str(output_path),
             format=fmt,
             cleanup=cleanup,
@@ -103,4 +142,3 @@ def export_graph(
         ) from exc
 
     return Path(rendered)
-    

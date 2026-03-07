@@ -93,26 +93,25 @@ def _cosine_similarity(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
 def build_index(
     files: list[str],
     model_name: str = DEFAULT_MODEL,
-) -> SemanticIndex:
+) -> None:
     """
-    Compute and store embeddings for a list of repository files.
+    Compute and store embeddings for each file's content.
 
-    Each file's content is read from disk, truncated to MAX_FILE_CHARS,
-    and encoded by the sentence-transformer model. Unreadable files are
-    included with an empty content embedding so index positions stay
-    aligned with file_paths.
+    Each file's content is read from disk, truncated to *MAX_FILE_CHARS*,
+    and encoded by the sentence-transformer model.  Unreadable files are
+    included with an empty-content embedding so index positions stay
+    aligned with *file_paths*.
+
+    The resulting :class:`SemanticIndex` is stored in the module-level
+    singleton and can be queried via :func:`search_index`.
 
     Args:
         files:      List of absolute (or resolvable) file path strings.
         model_name: HuggingFace model name or local path.
-                    Defaults to 'all-MiniLM-L6-v2'.
-
-    Returns:
-        Populated SemanticIndex stored as the module-level singleton.
-        Also returned directly for callers that want explicit access.
+                    Defaults to ``'all-MiniLM-L6-v2'``.
 
     Raises:
-        ValueError: If files list is empty.
+        ValueError: If *files* list is empty.
     """
     global _index
 
@@ -138,31 +137,35 @@ def build_index(
         file_paths=list(files),
         embeddings=embeddings.astype(np.float32),
     )
-    return _index
 
 
 def search_index(
     query: str,
-    top_n: int = TOP_N,
-    index: Optional[SemanticIndex] = None,
+    k: int = TOP_N,
+    *,
+    top_n: int | None = None,
+    index: SemanticIndex | None = None,
 ) -> list[str]:
     """
-    Return the most semantically similar files to a natural language query.
+    Return the top-*k* most semantically similar files to *query*.
 
     Args:
         query:  Natural language query string.
-        top_n:  Maximum number of results to return. Defaults to 5.
-        index:  SemanticIndex to search. Defaults to the module-level
-                singleton populated by build_index().
+        k:      Maximum number of results to return.  Defaults to 5.
+        top_n:  **Deprecated** alias for *k* (kept for backward compat).
+        index:  :class:`SemanticIndex` to search.  Defaults to the
+                module-level singleton populated by :func:`build_index`.
 
     Returns:
         List of file path strings ordered by descending similarity.
-        May be shorter than top_n if the index contains fewer files.
+        May be shorter than *k* if the index contains fewer files.
 
     Raises:
         RuntimeError: If no index has been built yet.
-        ValueError:   If query is empty.
+        ValueError:   If *query* is empty.
     """
+    n = top_n if top_n is not None else k
+
     target = index or _index
     if target is None or target.is_empty:
         raise RuntimeError(
@@ -179,7 +182,7 @@ def search_index(
 
     scores = _cosine_similarity(query_vec, target.embeddings)
 
-    # argsort ascending → take last top_n reversed for descending order
-    top_indices = np.argsort(scores)[-top_n:][::-1]
+    # argsort ascending → take last n reversed for descending order
+    top_indices = np.argsort(scores)[-n:][::-1]
 
     return [target.file_paths[i] for i in top_indices]

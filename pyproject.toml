@@ -1,0 +1,17 @@
+[project]
+name = "cni"
+version = "0.1.0"
+description = "Codebase Neural Interface — explore and query any codebase"
+requires-python = ">=3.10"
+
+dependencies = [
+    "typer",
+    "networkx",
+    "graphviz",
+    "requests",
+    "sentence-transformers",
+    "numpy"
+]
+
+[project.scripts]
+cni = "cni.cli.main:app"
