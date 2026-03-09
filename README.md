@@ -186,28 +186,3 @@ README.md
 ```
 
 ---
-
-## Contributing
-
-```bash
-# 1. Fork & clone
-git clone https://github.com/<you>/CNI_ATLAS.git
-cd CNI_ATLAS
-
-# 2. Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate   # Linux / macOS
-.venv\Scripts\activate      # Windows
-
-# 3. Install in editable mode
-pip install -e .
-
-# 4. Run locally
-cni analyze .
-```
-
----
-
-## License
-
-MIT
