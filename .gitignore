@@ -1,9 +1,47 @@
+# Python build artefacts
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# CNI runtime files
 .cni/
-*.png
+*.log
+test_*_error.log
+
+# Generated graph PNGs (except the example in docs/)
+dependency_graph.png
+my_repo_graph.png
+generated_graph.png
 test_graph
-my_repo_graph
-generated_graph
+*.gv
+
+# Local dev scripts
+validate_suite.py
+cni/validate_suite.py
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -7,10 +7,14 @@ Every module should import from here instead of rolling its own coloring.
 
 from __future__ import annotations
 
+import platform
 import sys
-
 import typer
 
+IS_WINDOWS = platform.system() == "Windows"
+TICK = "v" if IS_WINDOWS else "✓"
+CROSS = "x" if IS_WINDOWS else "✗"
+WARN = "!" if IS_WINDOWS else "⚠"
 
 def error(message: str, hint: str = "") -> None:
     """Print a formatted red error message with optional hint.
@@ -19,7 +23,7 @@ def error(message: str, hint: str = "") -> None:
         message: Primary error description.
         hint:    Optional follow-up line (e.g. fix instructions).
     """
-    typer.echo(typer.style(f"✗  {message}", fg=typer.colors.RED), err=True)
+    typer.echo(typer.style(f"{CROSS}  {message}", fg=typer.colors.RED), err=True)
     if hint:
         typer.echo(f"   {hint}", err=True)
 
@@ -30,7 +34,7 @@ def success(message: str) -> None:
     Args:
         message: Description of what succeeded.
     """
-    typer.echo(typer.style(f"✓  {message}", fg=typer.colors.GREEN))
+    typer.echo(typer.style(f"{TICK}  {message}", fg=typer.colors.GREEN))
 
 
 def warning(message: str) -> None:
@@ -39,7 +43,7 @@ def warning(message: str) -> None:
     Args:
         message: Warning text.
     """
-    typer.echo(typer.style(f"⚠  {message}", fg=typer.colors.YELLOW), err=True)
+    typer.echo(typer.style(f"{WARN}  {message}", fg=typer.colors.YELLOW), err=True)
 
 
 def abort(message: str, hint: str = "") -> None:
