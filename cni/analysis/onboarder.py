@@ -1,7 +1,22 @@
 """
 cni/analysis/onboarder.py
 
-Generates a structured onboarding report for unfamiliar codebases.
+Generates a structured onboarding report for developers who are new to a
+codebase.
+
+The report covers four things that matter most when ramping up on an unfamiliar
+project:
+
+1. **Entry points** — API routes, Celery tasks, and other files where execution
+   enters the system.
+2. **Critical modules** — the top-10 files by betweenness centrality.  These
+   are the "load-bearing walls" of the architecture.
+3. **Dead modules** — files with no in-edges and no out-edges that are likely
+   legacy or utility code never integrated into the main graph.
+4. **Architecture summary** — an optional 2-3 sentence LLM-generated plain
+   English description of how the codebase is organized.
+
+Used by ``cni onboard``.
 """
 
 from __future__ import annotations
@@ -103,7 +118,23 @@ def generate_onboarding_report(
 # ---------------------------------------------------------------------------
 
 def format_onboarding_report(report: OnboardingReport) -> str:
-    """Format an onboarding report for terminal output."""
+    """Format an :class:`OnboardingReport` as a human-readable terminal string.
+
+    Args:
+        report: The onboarding report dict produced by
+                :func:`generate_onboarding_report`.
+
+    Returns:
+        A multi-line string suitable for printing to stdout.
+
+    Example:
+        >>> report = generate_onboarding_report(graph, file_paths)
+        >>> print(format_onboarding_report(report))
+        CNI Onboarding Report
+        ─────────────────────
+        Entry points detected: 3
+        ...
+    """
     lines: list[str] = []
 
     lines.append("\nCNI Onboarding Report")

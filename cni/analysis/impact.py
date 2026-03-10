@@ -1,7 +1,16 @@
 """
 cni/analysis/impact.py
 
-Analyzes the blast radius of modifying a given file.
+Analyzes the blast radius of modifying a given file in the dependency graph.
+
+The impact analysis performs a reverse BFS (traversing edges backwards) to
+find all files that directly or transitively depend on the target file.  Each
+dependent is then scored by criticality (entry-point status, own-dependent
+count, and transitive depth), and the overall change is classified as LOW,
+MEDIUM, or HIGH risk.
+
+Used by ``cni impact <file>`` to help developers predict the consequences of
+a change before making it.
 """
 
 from __future__ import annotations
@@ -152,7 +161,22 @@ def analyze_impact(
 # ---------------------------------------------------------------------------
 
 def format_impact_report(report: ImpactReport) -> str:
-    """Format an impact report for terminal output."""
+    """Format an :class:`ImpactReport` as a human-readable terminal string.
+
+    Args:
+        report: The impact report dict produced by :func:`analyze_impact`.
+
+    Returns:
+        A multi-line string suitable for printing to stdout.
+
+    Example:
+        >>> report = analyze_impact(graph, target, file_paths)
+        >>> print(format_impact_report(report))
+        Impact report: cache.py
+        ───────────────────────
+          Direct dependents    : 2
+          ...
+    """
     lines: list[str] = []
     name = Path(report["target_file"]).name
 

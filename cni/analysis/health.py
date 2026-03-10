@@ -1,7 +1,20 @@
 """
 cni/analysis/health.py
 
-Computes codebase health metrics and produces a structured report.
+Computes codebase health metrics from the dependency graph and produces a
+structured :class:`HealthReport`.
+
+The three key signals are:
+
+- **God modules** — files with an in-degree ≥ 10 (many others import them).
+  These are high-risk change targets.
+- **Coupled modules** — files with an out-degree ≥ 15 (they import many
+  others).  These are brittle and hard to test in isolation.
+- **Isolated modules** — files with both in-degree and out-degree equal to
+  zero.  These are likely dead code or self-contained utilities.
+
+A single **health score** (0–100) is computed from these signals and
+printed by ``cni health``.
 """
 
 from __future__ import annotations
@@ -125,7 +138,22 @@ def compute_health(graph: nx.DiGraph) -> HealthReport:
 # ---------------------------------------------------------------------------
 
 def format_health_report(report: HealthReport) -> str:
-    """Format a health report for terminal output."""
+    """Format a :class:`HealthReport` as a human-readable terminal string.
+
+    Args:
+        report: The health report dict produced by :func:`compute_health`.
+
+    Returns:
+        A multi-line string suitable for printing to stdout.
+
+    Example:
+        >>> report = compute_health(graph)
+        >>> print(format_health_report(report))
+        Codebase Health Report
+        ──────────────────────
+          Total modules   : 26
+          ...
+    """
     lines: list[str] = []
 
     lines.append("\nCodebase Health Report")

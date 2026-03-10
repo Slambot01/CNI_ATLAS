@@ -2,17 +2,25 @@
 cni/cli/main.py
 
 Entry point for the CNI command-line interface.
-Exposes ``analyze``, ``graph``, ``visualize``, ``path``, ``explain``, and
-``ask`` commands via a :pypi:`typer` application object named ``app``.
 
-Usage::
+Exposes all CNI commands via a :pypi:`typer` application object named ``app``.
+Each command builds the dependency graph (with optional caching), then
+delegates to the appropriate analysis or retrieval module.
 
-    cni analyze <path>
-    cni graph <path>
-    cni visualize <path> [--output graph.png]
-    cni path <source> <target> [path_root]
-    cni explain <file> [path_root]
-    cni ask <question> [path]
+Available commands::
+
+    cni analyze  <path>               Scan and print graph statistics.
+    cni graph    <path>               Build, print stats, and export an image.
+    cni visualize <path>              Render a matplotlib visualization.
+    cni path     <source> <target>    Find the shortest dependency path.
+    cni explain  <file>               Show what a file imports and is imported by.
+    cni flow     <concept>            Trace execution flow for a business concept.
+    cni impact   <file>               Analyze the blast radius of modifying a file.
+    cni onboard  [path]               Generate a developer onboarding report.
+    cni health   [path]               Compute codebase health metrics.
+    cni ask      "<question>"         Ask a natural language question via LLM.
+    cni connect  <path1> <path2> ...  Merge and analyze multiple repositories.
+    cni doctor                        Run diagnostic checks on CNI dependencies.
 """
 
 from __future__ import annotations
@@ -52,16 +60,30 @@ app = typer.Typer(
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Private helpers
 # ---------------------------------------------------------------------------
 
 def _abort(message: str) -> None:
-    """Print an error message in red and exit with code 1."""
+    """Print a red error message and exit with code 1.
+
+    Args:
+        message: Error description to display.
+    """
     abort(message)
 
 
 def _scan(path: Path) -> list[str]:
-    """Scan repository for supported source files."""
+    """Scan a repository root for all supported source files.
+
+    Args:
+        path: Absolute path to the repository root directory.
+
+    Returns:
+        List of absolute file path strings for every discovered source file.
+
+    Raises:
+        typer.Exit: If scanning fails or no supported files are found.
+    """
     try:
         file_paths: list[str] = scan_repository(str(path))
     except Exception as exc:  # noqa: BLE001
@@ -77,7 +99,18 @@ def _scan(path: Path) -> list[str]:
 
 
 def _build(file_paths: list[str]) -> nx.DiGraph:
-    """Build dependency graph from file paths."""
+    """Build a dependency graph from a list of file paths.
+
+    Args:
+        file_paths: List of absolute file path strings to analyze.
+
+    Returns:
+        Directed dependency graph where nodes are file paths and edges
+        represent ``(importer, importee)`` relationships.
+
+    Raises:
+        typer.Exit: If graph construction fails.
+    """
     try:
         graph: nx.DiGraph = build_dependency_graph(file_paths)
     except Exception as exc:  # noqa: BLE001
@@ -87,7 +120,15 @@ def _build(file_paths: list[str]) -> nx.DiGraph:
 
 
 def _scan_and_build_graph(path: Path) -> tuple[list[str], nx.DiGraph]:
-    """Shared logic for scanning and building graph."""
+    """Scan a repository and build its dependency graph in one step.
+
+    Args:
+        path: Absolute path to the repository root directory.
+
+    Returns:
+        Tuple of ``(file_paths, graph)`` where ``file_paths`` is the list of
+        discovered files and ``graph`` is the resulting directed graph.
+    """
     file_paths = _scan(path)
     graph = _build(file_paths)
     return file_paths, graph
@@ -101,7 +142,10 @@ def _scan_and_build_graph(path: Path) -> tuple[list[str], nx.DiGraph]:
 def analyze(
     path: Path = typer.Argument(
         ...,
-        help="Path to the repository root to analyze.",
+        help=(
+            "Path to the repository root to analyze.  "
+            "Accepts any directory that contains Python, JS, or TS source files."
+        ),
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -111,9 +155,18 @@ def analyze(
 ) -> None:
     """Scan a repository, build its dependency graph, and print statistics.
 
-    If a valid cache exists at ``<path>/.cni/cache.json`` the scan is
-    skipped and the cached results are used instead.  After a fresh scan
-    the cache is always updated.
+    Performs a full recursive scan of the target directory, extracts all
+    import relationships, and prints a summary table including the number of
+    files indexed, total dependency edges, isolated files, and the most
+    heavily imported module.
+
+    Results are cached in ``<path>/.cni/cache.json`` so subsequent runs are
+    instant.  To force a fresh scan, delete the ``.cni/`` directory.
+
+    Example::
+
+        cni analyze .
+        cni analyze /path/to/my-project
     """
     typer.echo(typer.style("Analyzing repository...", fg=typer.colors.CYAN))
 
@@ -149,7 +202,10 @@ def analyze(
 def graph(
     path: Path = typer.Argument(
         ...,
-        help="Path to the repository root to analyze.",
+        help=(
+            "Path to the repository root to analyze.  "
+            "Accepts any directory containing Python, JS, or TS source files."
+        ),
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -158,38 +214,66 @@ def graph(
     ),
     output: str = typer.Option(
         "dependency_graph",
-        "--output",
-        "-o",
-        help="Output file path (without extension) for the graph image.",
+        "--output", "-o",
+        help=(
+            "Destination file path for the exported graph image, "
+            "WITHOUT the file extension (e.g. 'my_graph').  "
+            "Graphviz appends the format extension automatically."
+        ),
     ),
     fmt: str = typer.Option(
         "png",
-        "--format",
-        "-f",
-        help="Output format: png, svg, or pdf.",
+        "--format", "-f",
+        help="Output image format.  Supported values: png, svg, pdf.",
     ),
     depth: int = typer.Option(
         0,
         "--depth",
-        help="Only show nodes within N hops from entry points (0 = no filter).",
+        help=(
+            "Only include nodes within N hops from detected entry points.  "
+            "Useful for focusing on the top-level flow in large repos.  "
+            "0 disables this filter (show all nodes)."
+        ),
     ),
     min_imports: int = typer.Option(
         0,
         "--min-imports",
-        help="Only show nodes imported by at least N other modules (0 = no filter).",
+        help=(
+            "Only include nodes imported by at least N other modules "
+            "(i.e. in-degree >= N).  Useful for showing only central hub "
+            "modules.  0 disables this filter."
+        ),
     ),
     cluster: bool = typer.Option(
         False,
         "--cluster",
-        help="Collapse directories into single nodes showing package-level dependencies.",
+        help=(
+            "Collapse all files in the same directory into a single "
+            "package-level node.  Edges between files in different "
+            "directories become edges between the directory nodes.  "
+            "Useful for high-level architecture overviews of large repos."
+        ),
     ),
 ) -> None:
-    """Build the dependency graph, print stats, and export a graph image.
+    """Build the dependency graph, print statistics, and export an image.
 
-    Supports filtering for large repos:
-      --depth N        Keep only nodes within N hops from entry points.
-      --min-imports N  Keep only nodes imported by at least N modules.
-      --cluster        Collapse files into directory-level nodes.
+    Scans the repository, builds the full dependency graph, prints a stats
+    summary to the terminal, and renders a Graphviz image (PNG by default).
+
+    Supports three optional filters to control which nodes appear in the
+    exported image (filters are applied in the order shown):
+
+    - ``--depth N`` — keep only nodes reachable within N hops from entry points.
+    - ``--min-imports N`` — keep only nodes with at least N in-bound edges.
+    - ``--cluster`` — collapse file nodes into parent-directory nodes.
+
+    Requires Graphviz to be installed on the system (``dot`` in PATH).
+
+    Example::
+
+        cni graph .
+        cni graph . --output arch --format svg
+        cni graph . --depth 3 --cluster
     """
     typer.echo(typer.style("Building dependency graph...", fg=typer.colors.CYAN))
 
@@ -229,7 +313,10 @@ def graph(
 def visualize(
     path: Path = typer.Argument(
         ...,
-        help="Path to the repository root to analyze.",
+        help=(
+            "Path to the repository root to analyze.  "
+            "Accepts any directory containing Python, JS, or TS source files."
+        ),
         exists=True,
         file_okay=False,
         dir_okay=True,
@@ -238,15 +325,28 @@ def visualize(
     ),
     output: Path = typer.Option(
         "dependency_graph.png",
-        "--output",
-        "-o",
-        help="Output file path for the visualization (PNG format).",
+        "--output", "-o",
+        help=(
+            "Destination file path for the PNG visualization, "
+            "including the ``.png`` extension.  "
+            "Defaults to ``dependency_graph.png`` in the current directory."
+        ),
     ),
 ) -> None:
-    """Generate a visual representation of the dependency graph.
+    """Generate a matplotlib visualization of the dependency graph.
 
-    Creates a PNG image showing the module dependencies discovered
-    in the repository.
+    Builds the dependency graph and renders it as a PNG image using
+    matplotlib and networkx's spring layout.  Unlike ``cni graph``, this
+    command does not require Graphviz to be installed.
+
+    Requires ``matplotlib`` to be installed::
+
+        pip install matplotlib
+
+    Example::
+
+        cni visualize .
+        cni visualize /path/to/repo --output my_viz.png
     """
     try:
         import matplotlib.pyplot as plt  # noqa: WPS433
@@ -324,25 +424,38 @@ def visualize(
 def path(
     source: str = typer.Argument(
         ...,
-        help="Source file name or path.",
+        help=(
+            "Source file to start from.  Accepts a full path, partial path "
+            "(e.g. ``services/auth.py``), or bare filename (e.g. ``auth.py``)."
+        ),
     ),
     target: str = typer.Argument(
         ...,
-        help="Target file name or path.",
+        help=(
+            "Target file to trace to.  Accepts a full path, partial path, "
+            "or bare filename."
+        ),
     ),
     path_root: Path = typer.Argument(
         ".",
-        help="Repository root.",
+        help="Repository root directory.  Defaults to the current directory.",
         exists=True,
         dir_okay=True,
         file_okay=False,
         resolve_path=True,
     ),
 ) -> None:
-    """Find the dependency path between two files.
+    """Find the shortest dependency path between two files.
 
-    Shows whether file A depends on file B and the chain of dependencies
-    connecting them, if one exists.
+    Scans the repository, builds the dependency graph, and searches for the
+    shortest directed path from SOURCE to TARGET through import edges.
+
+    Useful for understanding why a change to one file might affect another.
+
+    Example::
+
+        cni path cni/cli/main.py cni/graph/dependency_graph.py
+        cni path main.py cache.py /path/to/repo
     """
     typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
 
@@ -372,11 +485,15 @@ def path(
 def explain(
     file: str = typer.Argument(
         ...,
-        help="File name or path to explain.",
+        help=(
+            "File to explain.  Accepts a full path, partial path "
+            "(e.g. ``graph/dependency_graph.py``), or bare filename "
+            "(e.g. ``dependency_graph.py``)."
+        ),
     ),
     path_root: Path = typer.Argument(
         ".",
-        help="Repository root.",
+        help="Repository root directory.  Defaults to the current directory.",
         exists=True,
         dir_okay=True,
         file_okay=False,
@@ -385,9 +502,18 @@ def explain(
 ) -> None:
     """Explain how a file participates in the dependency graph.
 
-    Shows:
-      - Files that this file imports
-      - Files that import this file
+    Looks up the given file in the dependency graph and shows:
+
+    - **Imports** — the modules this file directly imports.
+    - **Imported by** — the modules that import this file.
+
+    This is useful for quickly understanding a file's role in the codebase
+    before reading its source code.
+
+    Example::
+
+        cni explain dependency_graph.py
+        cni explain cni/storage/cache.py .
     """
     typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
 
@@ -406,7 +532,13 @@ def explain(
 
 
 def _suppress_model_noise() -> None:
-    """Suppress noisy model-loading output from sentence-transformers."""
+    """Suppress noisy model-loading output from sentence-transformers.
+
+    Sets ``TOKENIZERS_PARALLELISM=false`` and silences the
+    ``sentence_transformers`` and HuggingFace ``transformers`` loggers so
+    that model download progress bars and warnings don't clutter CNI's
+    output.
+    """
     import logging
     import os
 
@@ -423,21 +555,41 @@ def _suppress_model_noise() -> None:
 def flow(
     concept: str = typer.Argument(
         ...,
-        help="Business concept to trace (e.g. 'order processing').",
+        help=(
+            "Business concept to trace, expressed as a short natural-language "
+            "phrase (e.g. 'order processing', 'user authentication', 'payment').  "
+            "CNI uses semantic search to find files related to this concept and "
+            "then traces the execution chain through the dependency graph."
+        ),
     ),
     path: Path = typer.Argument(
         ".",
-        help="Repository root.",
+        help="Repository root directory.  Defaults to the current directory.",
         exists=True,
         dir_okay=True,
         file_okay=False,
         resolve_path=True,
     ),
 ) -> None:
-    """Trace execution flow for a business concept.
+    """Trace the execution flow for a business concept through the codebase.
 
-    Detects entry points (API routes, tasks), finds semantically related
-    files, and traces the execution chain through the dependency graph.
+    Combines semantic search with dependency graph traversal to map out how
+    a particular business concern (e.g. "order processing") flows through
+    the code:
+
+    1. Detects entry points (API routes, Celery tasks, etc.).
+    2. Finds files semantically related to the concept via sentence-transformer
+       embeddings.
+    3. Performs a BFS from each entry point, following edges only through
+       related files, to reconstruct execution chains.
+
+    Requires the sentence-transformers model to be available locally or
+    downloadable from HuggingFace.
+
+    Example::
+
+        cni flow "user authentication"
+        cni flow "payment processing" /path/to/repo
     """
     _suppress_model_noise()
 
@@ -470,11 +622,15 @@ def flow(
 def impact(
     file: str = typer.Argument(
         ...,
-        help="File name or path to analyze impact for.",
+        help=(
+            "File to analyze.  Accepts a full path, partial path "
+            "(e.g. ``storage/cache.py``), or bare filename (e.g. ``cache.py``).  "
+            "CNI will find the best match in the dependency graph."
+        ),
     ),
     path_root: Path = typer.Argument(
         ".",
-        help="Repository root.",
+        help="Repository root directory.  Defaults to the current directory.",
         exists=True,
         dir_okay=True,
         file_okay=False,
@@ -483,8 +639,17 @@ def impact(
 ) -> None:
     """Analyze the blast radius of modifying a file.
 
-    Shows direct and transitive dependents, scores them by criticality,
-    and classifies overall risk as LOW/MEDIUM/HIGH.
+    Performs a reverse BFS through the dependency graph to find every file
+    that directly or transitively imports the target file.  Each dependent is
+    scored by criticality (entry-point status, fan-in, and transitive depth).
+
+    The report classifies overall risk as LOW / MEDIUM / HIGH and lists the
+    top-10 most critical dependents so you can prioritize your testing effort.
+
+    Example::
+
+        cni impact cache.py
+        cni impact cni/storage/cache.py .
     """
     typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
     file_paths = _scan(path_root)
@@ -505,17 +670,28 @@ def impact(
 def onboard(
     path: Path = typer.Argument(
         ".",
-        help="Repository root.",
+        help="Repository root directory.  Defaults to the current directory.",
         exists=True,
         dir_okay=True,
         file_okay=False,
         resolve_path=True,
     ),
 ) -> None:
-    """Generate an onboarding report for the codebase.
+    """Generate a developer onboarding report for the codebase.
 
-    Detects entry points, ranks modules by centrality, flags dead modules,
-    and generates an LLM architecture summary.
+    Produces a structured summary designed for engineers who are new to the
+    project, covering:
+
+    - **Entry points** detected by framework decorator patterns.
+    - **Critical modules** ranked by betweenness centrality (read these first).
+    - **Dead modules** — isolated files that are likely legacy or unused.
+    - **Architecture summary** — a concise LLM-generated plain-English
+      description of how the codebase is organized (requires Ollama).
+
+    Example::
+
+        cni onboard
+        cni onboard /path/to/repo
     """
     typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
     file_paths = _scan(path)
@@ -532,17 +708,28 @@ def onboard(
 def health(
     path: Path = typer.Argument(
         ".",
-        help="Repository root.",
+        help="Repository root directory.  Defaults to the current directory.",
         exists=True,
         dir_okay=True,
         file_okay=False,
         resolve_path=True,
     ),
 ) -> None:
-    """Compute codebase health metrics.
+    """Compute codebase health metrics and print a health report.
 
-    Reports god modules, coupled modules, isolated files, and an
-    overall health score from 0 to 100.
+    Analyzes the dependency graph for three structural anti-patterns:
+
+    - **God modules** — files imported by 10+ other files (high-risk to change).
+    - **Highly coupled modules** — files that import 15+ others (brittle).
+    - **Isolated modules** — files with no imports and no importers (dead code?).
+
+    An overall health score (0–100) is computed from these signals.  A score
+    of 100 means no anti-patterns were detected.
+
+    Example::
+
+        cni health
+        cni health /path/to/repo
     """
     typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
     file_paths = _scan(path)
@@ -559,18 +746,40 @@ def health(
 def ask(
     question: str = typer.Argument(
         ...,
-        help="Question about the codebase.",
+        help=(
+            "Natural-language question about the codebase, enclosed in quotes "
+            "(e.g. \"What does repo_scanner do?\").  CNI retrieves the most "
+            "relevant code context using semantic search and sends it to the LLM."
+        ),
     ),
     path: Path = typer.Argument(
         ".",
-        help="Repository root.",
+        help="Repository root directory.  Defaults to the current directory.",
         exists=True,
         dir_okay=True,
         file_okay=False,
         resolve_path=True,
     ),
 ) -> None:
-    """Ask a natural language question about the codebase."""
+    """Ask a natural language question about the codebase.
+
+    Uses a two-step retrieval-augmented generation (RAG) pipeline:
+
+    1. Embeds the question and all source files with a local sentence-transformer
+       model to find the most semantically relevant code context.
+    2. Sends the retrieved context and question to a local Ollama LLM for a
+       concise, grounded answer.
+
+    Requires Ollama to be running with a compatible model pulled::
+
+        ollama serve
+        ollama pull qwen2.5-coder:7b
+
+    Example::
+
+        cni ask "What does repo_scanner do?"
+        cni ask "How is the cache invalidated?" /path/to/repo
+    """
     _suppress_model_noise()
 
     typer.echo("Scanning repository...")
@@ -593,13 +802,30 @@ def ask(
 def connect(
     paths: list[str] = typer.Argument(
         ...,
-        help="Paths to repository roots to connect.",
+        help=(
+            "Two or more paths to repository roots to connect.  "
+            "Each path is scanned independently and then merged into "
+            "a unified cross-repo dependency graph."
+        ),
     ),
 ) -> None:
-    """Connect multiple repositories for cross-service analysis.
+    """Connect multiple repositories and detect cross-service dependencies.
 
-    Scans each repository independently, merges all graphs into a
-    unified cross-repo graph, and detects cross-service connections.
+    Scans each repository independently, merges all graphs into a unified
+    cross-repo graph, and detects cross-service connections using two
+    heuristics:
+
+    - **Shared module names** — files with the same stem across different repos.
+    - **API client pattern** — files named ``*_client.py`` matched to same-named
+      service files in other repos.
+
+    Useful for microservice architectures where you want to understand how
+    services depend on shared libraries or call each other.
+
+    Example::
+
+        cni connect /path/to/service-a /path/to/service-b
+        cni connect ./auth-service ./payment-service ./api-gateway
     """
     from pathlib import Path as _Path
 
@@ -658,13 +884,20 @@ def connect(
 
 @app.command()
 def doctor() -> None:
-    """Run diagnostic checks for CNI's dependencies.
+    """Run diagnostic checks for all of CNI's external dependencies.
 
-    Checks:
-      1. Ollama reachability
-      2. Available Ollama models
-      3. Graphviz installation
-      4. CNI cache presence
+    Performs four checks and prints a pass/fail status for each:
+
+    1. **Ollama reachability** — can CNI reach ``http://localhost:11434``?
+    2. **Ollama models** — is at least one model available for inference?
+    3. **Graphviz** — is the ``dot`` binary present in the system PATH?
+    4. **CNI cache** — does ``.cni/cache.json`` exist in the current directory?
+
+    Run this first if any CNI command is producing unexpected errors.
+
+    Example::
+
+        cni doctor
     """
     import shutil
 

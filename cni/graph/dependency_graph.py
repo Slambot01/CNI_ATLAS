@@ -1,8 +1,23 @@
 """
-graph/graph_builder.py
+cni/graph/dependency_graph.py
 
-Builds a dependency graph from a repository's file paths.
-Supports Python (.py) and JavaScript/TypeScript (.js, .ts, .jsx, .tsx).
+Builds and queries directed dependency graphs from repository source files.
+
+This module is the heart of CNI's static analysis engine.  Given a list of
+file paths it:
+
+1. Reads every file and extracts its import statements (Python via AST,
+   JS/TS via regex).
+2. Resolves each import string to an absolute path inside the repo, building
+   a lookup table that handles relative imports, dot-notation, and
+   index-file conventions.
+3. Constructs a :class:`networkx.DiGraph` where nodes are absolute file
+   paths and edges represent ``(importer, importee)`` relationships.
+4. Optionally merges multiple per-repo graphs into a unified cross-repo
+   graph for ``cni connect``.
+
+Supports Python (``.py``), JavaScript (``.js``), TypeScript (``.ts``),
+JSX (``.jsx``), and TSX (``.tsx``).
 """
 
 from __future__ import annotations
@@ -31,9 +46,16 @@ SUPPORTED_EXTENSIONS: set[str] = {".py", ".js", ".ts", ".jsx", ".tsx"}
 
 def _extract_python_imports(file_path: Path) -> list[str]:
     """
-    Parse a Python file with the built-in AST and return a list of
-    raw module names that are imported.
+    Parse a Python file with the built-in AST and return imported module names.
+
     Falls back to an empty list on syntax errors.
+
+    Args:
+        file_path: Absolute path to a ``.py`` file.
+
+    Returns:
+        List of raw module name strings as written in the source
+        (e.g. ``'os'``, ``'cni.utils.errors'``, ``'.relative_module'``).
     """
     try:
         source = file_path.read_text(encoding="utf-8", errors="replace")
@@ -69,8 +91,17 @@ _JS_IMPORT_RE = re.compile(
 
 def _extract_js_imports(file_path: Path) -> list[str]:
     """
-    Extract import/require paths from JS/TS files using regex.
-    Returns raw specifiers as written in source (e.g. './utils/auth').
+    Extract import/require specifiers from JS/TS files using regex.
+
+    Matches ES module ``import`` statements and CommonJS ``require()`` calls.
+    Returns raw specifiers as written in source (e.g. ``'./utils/auth'``).
+
+    Args:
+        file_path: Absolute path to a ``.js``, ``.ts``, ``.jsx``, or
+                   ``.tsx`` file.
+
+    Returns:
+        List of raw import specifier strings.
     """
     try:
         source = file_path.read_text(encoding="utf-8", errors="replace")
@@ -81,7 +112,15 @@ def _extract_js_imports(file_path: Path) -> list[str]:
 
 
 def extract_imports(file_path: Path) -> list[str]:
-    """Dispatch to the correct extractor based on file extension."""
+    """Dispatch to the correct import extractor based on file extension.
+
+    Args:
+        file_path: Path to any supported source file.
+
+    Returns:
+        List of raw import strings for the file, or an empty list if the
+        extension is not recognised.
+    """
     ext = file_path.suffix.lower()
     if ext == ".py":
         return _extract_python_imports(file_path)
@@ -98,10 +137,20 @@ def _build_lookup(file_paths: list[Path]) -> dict[str, Path]:
     """
     Build a mapping from every reasonable lookup key to an absolute Path.
 
-    Keys stored for each file:
-      • absolute path string
-      • path relative to each parent (for package-style lookups)
-      • dot-notation module name  (e.g. 'utils.auth')
+    Generates multiple keys per file so that import strings written in
+    different styles (absolute path, relative slash, dot-notation) all
+    resolve correctly:
+
+    - Absolute path string
+    - Path relative to each ancestor directory
+    - Dot-notation module name  (e.g. ``'cni.utils.auth'``)
+    - Slash-notation without extension (e.g. ``'cni/utils/auth'``)
+
+    Args:
+        file_paths: List of resolved :class:`~pathlib.Path` objects.
+
+    Returns:
+        Dict mapping lookup key strings to :class:`~pathlib.Path` objects.
     """
     lookup: dict[str, Path] = {}
 
@@ -133,11 +182,24 @@ def _resolve_python_import(
     lookup: dict[str, Path],
 ) -> Path | None:
     """
-    Try to map a Python import string to a file in the repository.
+    Try to map a Python import string to a file path in the repository.
 
-    Strategy (in order):
-      1. Relative imports  → resolve against source_file's directory
-      2. Absolute imports  → try dot → slash conversion across lookup
+    Resolution strategy (in order):
+
+    1. **Relative imports** (leading dots) — resolved against the source
+       file’s directory, walking up one level per extra dot.
+    2. **Absolute imports** — dot-to-slash conversion tried first, then
+       direct dot-key lookup.
+
+    Args:
+        module:      Raw import string (e.g. ``'cni.utils.errors'`` or
+                     ``'.relative_mod'``).
+        source_file: Path to the file that contains the import statement.
+        lookup:      Lookup table built by :func:`_build_lookup`.
+
+    Returns:
+        Resolved :class:`~pathlib.Path` of the imported file, or ``None``
+        if the import cannot be resolved to a repo-local file.
     """
     if module.startswith("."):
         # Relative import: count leading dots
@@ -176,9 +238,19 @@ def _resolve_js_import(
     lookup: dict[str, Path],
 ) -> Path | None:
     """
-    Resolve a JS/TS import specifier to a file.
-    Only resolves relative imports (starting with ./ or ../).
-    Bare module specifiers (npm packages) are ignored.
+    Resolve a JS/TS import specifier to a file path in the repository.
+
+    Only relative imports (starting with ``./`` or ``../``) are resolved.
+    Bare module specifiers (npm packages such as ``'react'``) are ignored.
+
+    Args:
+        specifier:   Raw import specifier from the source file.
+        source_file: Path to the file that contains the import statement.
+        lookup:      Lookup table built by :func:`_build_lookup`.
+
+    Returns:
+        Resolved :class:`~pathlib.Path`, or ``None`` for third-party
+        packages or specifiers that cannot be found in the repo.
     """
     if not specifier.startswith("."):
         return None  # third-party package — skip
@@ -203,7 +275,17 @@ def resolve_import(
     source_file: Path,
     lookup: dict[str, Path],
 ) -> Path | None:
-    """Unified resolver — dispatches by source file extension."""
+    """Unified import resolver — dispatches by source file extension.
+
+    Args:
+        raw_import:  Raw import string extracted from the source file.
+        source_file: Path to the file that contains the import.
+        lookup:      Lookup table from :func:`_build_lookup`.
+
+    Returns:
+        Resolved :class:`~pathlib.Path` of the imported file, or ``None``
+        if the import points to a third-party library or cannot be found.
+    """
     ext = source_file.suffix.lower()
     if ext == ".py":
         return _resolve_python_import(raw_import, source_file, lookup)
@@ -284,13 +366,23 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
 
 def get_graph_stats(graph: nx.DiGraph) -> dict[str, int]:
     """
-    Return a dictionary of graph statistics.
+    Return a dictionary of summary statistics for a dependency graph.
 
-    Keys:
-        files        — total nodes
-        dependencies — total edges
-        isolated     — files with no imports and not imported by anyone
-        most_imported — in-degree of the most-depended-upon file
+    Args:
+        graph: Directed dependency graph.
+
+    Returns:
+        Dict with keys:
+
+        - ``files`` — total number of nodes.
+        - ``dependencies`` — total number of edges.
+        - ``isolated`` — count of files with in-degree = 0 AND out-degree = 0.
+        - ``most_imported`` — highest in-degree across all nodes.
+
+    Example:
+        >>> stats = get_graph_stats(graph)
+        >>> stats['files']
+        26
     """
     if graph.number_of_nodes() == 0:
         return {
@@ -314,7 +406,20 @@ def get_graph_stats(graph: nx.DiGraph) -> dict[str, int]:
 
 
 def print_graph_stats(graph: nx.DiGraph) -> None:
-    """Pretty-print graph statistics to stdout (for `cni stats`)."""
+    """Pretty-print dependency graph statistics to stdout.
+
+    Args:
+        graph: Directed dependency graph to summarise.
+
+    Example output::
+
+        Repository statistics
+        ------------------------------
+          Files indexed     : 26
+          Dependencies      : 27
+          Isolated files    : 9
+          Most imported     : 6 dependents
+    """
     stats = get_graph_stats(graph)
     print("Repository statistics")
     print("-" * 30)
@@ -324,7 +429,7 @@ def print_graph_stats(graph: nx.DiGraph) -> None:
     print(f"  Most imported     : {stats['most_imported']} dependents")
 
 # ---------------------------------------------------------------------------
-# Multi-repo graph merging (Problem 7)
+# Multi-repo graph merging
 # ---------------------------------------------------------------------------
 
 def merge_graphs(
@@ -366,11 +471,23 @@ def _detect_cross_service(
     repo_graphs: list[tuple[str, nx.DiGraph]],
     unified: nx.DiGraph,
 ) -> list[tuple[str, str]]:
-    """Detect connections between repositories.
+    """Detect edges that cross repository boundaries in a unified graph.
 
-    Strategies:
-      1. Shared module names across repos.
-      2. API client patterns (files named ``*_client.py``).
+    Two detection strategies are applied:
+
+    1. **Shared module names** — if two files from different repos have the
+       same stem name, they likely represent the same logical component and
+       a cross-service edge is added.
+    2. **API client pattern** — files named ``*_client.py`` or containing
+       ``'client'`` are linked to same-named service files in other repos.
+
+    Args:
+        repo_graphs: Original list of ``(repo_name, graph)`` tuples.
+        unified:     The merged graph built in :func:`merge_graphs`.  This
+                     function both queries and mutates it.
+
+    Returns:
+        List of ``(source_node, target_node)`` cross-repo edge tuples.
     """
     from cni.utils.platform import normalize_path
     
