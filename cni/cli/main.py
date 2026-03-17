@@ -38,7 +38,7 @@ from cni.analysis.impact import analyze_impact, format_impact_report
 from cni.analysis.onboarder import generate_onboarding_report, format_onboarding_report
 from cni.analysis.path_finder import find_dependency_path, print_dependency_path
 from cni.analyzer.repo_scanner import scan_repository
-from cni.graph.dependency_graph import build_dependency_graph, merge_graphs, print_graph_stats
+from cni.graph.graph_builder import build_dependency_graph, merge_graphs, print_graph_stats
 from cni.graph.export import (
     export_graph,
     filter_graph_by_depth,
@@ -454,7 +454,7 @@ def path(
 
     Example::
 
-        cni path cni/cli/main.py cni/graph/dependency_graph.py
+        cni path cni/cli/main.py cni/graph/graph_builder.py
         cni path main.py cache.py /path/to/repo
     """
     typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))
@@ -487,8 +487,8 @@ def explain(
         ...,
         help=(
             "File to explain.  Accepts a full path, partial path "
-            "(e.g. ``graph/dependency_graph.py``), or bare filename "
-            "(e.g. ``dependency_graph.py``)."
+            "(e.g. ``graph/graph_builder.py``), or bare filename "
+            "(e.g. ``graph_builder.py``)."
         ),
     ),
     path_root: Path = typer.Argument(
@@ -512,7 +512,7 @@ def explain(
 
     Example::
 
-        cni explain dependency_graph.py
+        cni explain graph_builder.py
         cni explain cni/storage/cache.py .
     """
     typer.echo(typer.style("Scanning repository...", fg=typer.colors.CYAN))

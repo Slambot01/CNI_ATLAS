@@ -9,7 +9,7 @@ from pathlib import Path
 import networkx as nx
 import pytest
 
-from cni.graph.dependency_graph import (
+from cni.graph.graph_builder import (
     build_dependency_graph,
     get_graph_stats,
 )

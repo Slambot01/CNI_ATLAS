@@ -7,10 +7,12 @@ codebase.
 The report covers four things that matter most when ramping up on an unfamiliar
 project:
 
-1. **Entry points** — API routes, Celery tasks, and other files where execution
-   enters the system.
+1. **Entry points** — API routes, Celery tasks, CLI commands, Spiders, and
+   other files where execution enters the system.  Detected via both
+   *framework-pattern matching* and *graph-based analysis* (zero in-degree).
 2. **Critical modules** — the top-10 files by betweenness centrality.  These
-   are the "load-bearing walls" of the architecture.
+   are the "load-bearing walls" of the architecture.  Noise files such as
+   ``__init__.py`` and ``conftest.py`` are filtered out.
 3. **Dead modules** — files with no in-edges and no out-edges that are likely
    legacy or utility code never integrated into the main graph.
 4. **Architecture summary** — an optional 2-3 sentence LLM-generated plain
@@ -26,7 +28,10 @@ from typing import TypedDict
 
 import networkx as nx
 
-from cni.analysis.flow_tracer import detect_entry_points
+from cni.analysis.flow_tracer import (
+    detect_entry_points,
+    detect_entry_points_from_graph,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -52,8 +57,8 @@ def generate_onboarding_report(
     """Generate a comprehensive onboarding report.
 
     Steps:
-      1. Detect entry points (API routes, tasks, etc.)
-      2. Rank modules by betweenness centrality
+      1. Detect entry points using *both* framework patterns and graph analysis
+      2. Rank modules by betweenness centrality (filtering noise)
       3. Flag dead modules (zero in-degree AND zero out-degree)
       4. Optionally generate an LLM architecture summary
 
@@ -67,29 +72,85 @@ def generate_onboarding_report(
     Returns:
         An :class:`OnboardingReport` dict.
     """
-    # 1. Entry points
-    eps = detect_entry_points(file_paths)
-    ep_names = [ep["file"] for ep in eps]
+    # ------------------------------------------------------------------
+    # 1. Entry points — combine pattern-based + graph-based strategies
+    # ------------------------------------------------------------------
 
-    # 2. Betweenness centrality
+    # Derive repo_path from file_paths (common ancestor)
+    repo_path = "."
+    if file_paths:
+        try:
+            parts = [Path(fp).parts for fp in file_paths[:20]]
+            common = Path(*parts[0])
+            for p in parts[1:]:
+                while common.parts and common.parts != p[: len(common.parts)]:
+                    common = common.parent
+            repo_path = str(common)
+        except Exception:
+            repo_path = str(Path(file_paths[0]).parent)
+
+    # Strategy 1: pattern based
+    eps = detect_entry_points(file_paths, repo_path)
+    pattern_entries = [ep["file"] for ep in eps]
+
+    # Strategy 2: graph based
+    graph_entries = detect_entry_points_from_graph(graph, file_paths)
+
+    # Combine and deduplicate
+    all_entries = list(dict.fromkeys(pattern_entries + graph_entries))
+
+    # Use filenames only for display
+    ep_names = all_entries
+
+    # ------------------------------------------------------------------
+    # 2. Betweenness centrality — filter noise from ranking
+    # ------------------------------------------------------------------
+
     centrality: dict[str, float] = nx.betweenness_centrality(graph)
     ranked = sorted(centrality.items(), key=lambda x: x[1], reverse=True)
-    top_10 = [(Path(node).name, round(score, 2)) for node, score in ranked[:10]]
 
+    noise = {
+        "__init__", "conftest", "setup",
+        "test_", "migrate", "wsgi", "asgi",
+    }
+
+    critical = [
+        (node, score)
+        for node, score in ranked
+        if not any(n in Path(node).stem.lower() for n in noise)
+    ][:10]
+
+    top_10 = [
+        (Path(node).name, round(score, 2))
+        for node, score in critical
+    ]
+
+    # ------------------------------------------------------------------
     # 3. Dead modules
-    dead: list[str] = []
-    for node in graph.nodes:
-        if graph.in_degree(node) == 0 and graph.out_degree(node) == 0:
-            dead.append(Path(node).name)
+    # ------------------------------------------------------------------
 
-    # 4. Architecture summary via LLM
+    dead = [
+        Path(n).name for n in graph.nodes
+        if graph.in_degree(n) == 0
+        and graph.out_degree(n) == 0
+        and "__init__" not in Path(n).name
+        and "test_" not in Path(n).name
+        and "__main__" not in Path(n).name
+    ]
+
+    # ------------------------------------------------------------------
+    # 4. Architecture summary via LLM (with graceful error handling)
+    # ------------------------------------------------------------------
+
     summary = "(LLM summary not available — Ollama may not be running)"
     if llm_fn is not None and callable(llm_fn):
         try:
             module_info = "\n".join(
                 f"  {name} (centrality: {score})" for name, score in top_10
             )
-            ep_info = "\n".join(f"  {Path(e).name}" for e in ep_names[:5])
+            ep_info = "\n".join(
+                f"  {Path(e).name}" for e in ep_names[:5]
+            )
             context = (
                 f"Top modules by centrality:\n{module_info}\n\n"
                 f"Entry points:\n{ep_info}\n\n"
@@ -102,8 +163,20 @@ def generate_onboarding_report(
                 "connect."
             )
             summary = llm_fn(context, question)
-        except Exception:
-            summary = "(Failed to generate LLM summary)"
+        except Exception as e:
+            error_str = str(e)
+            if "500" in error_str:
+                summary = (
+                    "LLM temporarily unavailable.\n"
+                    "  Try: ollama stop && ollama serve"
+                )
+            elif "ConnectionRefused" in error_str or "Connection refused" in error_str:
+                summary = (
+                    "Ollama is not running.\n"
+                    "  Start it with: ollama serve"
+                )
+            else:
+                summary = f"LLM unavailable: {error_str}"
 
     return OnboardingReport(
         entry_points=ep_names,

@@ -2,6 +2,9 @@
 cni/analysis/flow_tracer.py
 
 Detects entry points and traces execution flow for a given business concept.
+
+Supports **framework-aware** entry-point detection (Django, Flask, FastAPI,
+Scrapy, Celery, etc.) as well as graph-based detection (zero in-degree nodes).
 """
 
 from __future__ import annotations
@@ -31,42 +34,177 @@ class FlowReport(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# Entry-point detection patterns
+# Framework detection
 # ---------------------------------------------------------------------------
 
-# Decorators that mark entry points (API routes, tasks, etc.)
-_ENTRY_PATTERNS: list[str] = [
-    r"@app\.route",
-    r"@app\.get",
-    r"@app\.post",
-    r"@app\.put",
-    r"@app\.delete",
-    r"@router\.get",
-    r"@router\.post",
-    r"@router\.put",
-    r"@router\.delete",
-    r"@celery\.task",
-    r"@app\.task",
-    r"@shared_task",
-]
+def detect_framework(repo_path: str) -> list[str]:
+    """Detect which frameworks are used in the repo by reading dependency files.
 
-_COMPILED_PATTERNS = [re.compile(p) for p in _ENTRY_PATTERNS]
+    Scans ``requirements.txt``, ``pyproject.toml``, ``setup.py``,
+    ``setup.cfg``, and ``Pipfile`` for known framework keywords.
+
+    Args:
+        repo_path: Root path of the repository.
+
+    Returns:
+        List of detected framework name strings (e.g. ``["django", "celery"]``).
+    """
+    frameworks: list[str] = []
+    repo = Path(repo_path)
+
+    dep_files = [
+        repo / "requirements.txt",
+        repo / "pyproject.toml",
+        repo / "setup.py",
+        repo / "setup.cfg",
+        repo / "Pipfile",
+    ]
+
+    content = ""
+    for f in dep_files:
+        if f.exists():
+            content += f.read_text(encoding="utf-8", errors="replace").lower()
+
+    checks: dict[str, list[str]] = {
+        "django":   ["django"],
+        "flask":    ["flask"],
+        "fastapi":  ["fastapi"],
+        "scrapy":   ["scrapy"],
+        "celery":   ["celery"],
+        "click":    ["click"],
+        "typer":    ["typer"],
+        "airflow":  ["airflow", "apache-airflow"],
+        "pytest":   ["pytest"],
+        "grpc":     ["grpc", "grpcio"],
+        "graphql":  ["graphene", "strawberry"],
+        "aiohttp":  ["aiohttp"],
+        "tornado":  ["tornado"],
+        "sanic":    ["sanic"],
+    }
+
+    for name, keywords in checks.items():
+        if any(k in content for k in keywords):
+            frameworks.append(name)
+
+    return frameworks
 
 
-def detect_entry_points(file_paths: list[str]) -> list[EntryPoint]:
-    """Scan files for entry-point decorators.
+# ---------------------------------------------------------------------------
+# Framework pattern map
+# ---------------------------------------------------------------------------
 
-    Looks for common framework patterns such as ``@app.route``,
-    ``@router.get``, ``@celery.task``, etc.
+FRAMEWORK_PATTERNS: dict[str, list[str]] = {
+    "django": [
+        "urlpatterns",
+        r"def get\(",
+        r"def post\(",
+        r"def put\(",
+        r"def delete\(",
+        r"class.*View",
+        r"class.*ViewSet",
+    ],
+    "flask": [
+        r"@app\.route",
+        r"@blueprint\.route",
+        r"@.*\.route",
+    ],
+    "fastapi": [
+        r"@router\.get",
+        r"@router\.post",
+        r"@router\.put",
+        r"@router\.delete",
+        r"@app\.get",
+        r"@app\.post",
+    ],
+    "scrapy": [
+        r"class.*Spider",
+        r"class.*CrawlSpider",
+        "start_requests",
+        r"def parse\(",
+    ],
+    "celery": [
+        r"@celery\.task",
+        r"@app\.task",
+        "@shared_task",
+    ],
+    "click": [
+        r"@click\.command",
+        r"@click\.group",
+        r"@cli\.command",
+    ],
+    "typer": [
+        r"@app\.command",
+        r"typer\.Typer",
+    ],
+    "airflow": [
+        r"DAG\(",
+        "@task",
+        "PythonOperator",
+        "BashOperator",
+    ],
+    "pytest": [
+        "def test_",
+        "class Test",
+    ],
+    "grpc": [
+        r"add_.*Servicer",
+        r"grpc\.server",
+    ],
+    "graphql": [
+        r"@query\.field",
+        r"@mutation\.field",
+        r"@strawberry\.type",
+    ],
+    "generic": [
+        r"def main\(",
+        "if __name__",
+        r"@.*\.command",
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
+# Entry-point detection (framework-aware)
+# ---------------------------------------------------------------------------
+
+def detect_entry_points(
+    file_paths: list[str],
+    repo_path: str = ".",
+) -> list[EntryPoint]:
+    """Detect entry points using framework-specific pattern matching.
+
+    1. Detects which frameworks the repo uses via :func:`detect_framework`.
+    2. Collects all relevant regex patterns for those frameworks.
+    3. Scans every ``.py`` file for matching patterns.
+
+    The ``generic`` patterns (``def main(``, ``if __name__``) are always
+    included as a fallback.
 
     Args:
         file_paths: List of absolute file path strings.
+        repo_path:  Root path of the repository (used for framework detection).
 
     Returns:
         List of :class:`EntryPoint` dicts with ``file`` and ``decorator``.
     """
-    results: list[EntryPoint] = []
+    # Strategy 1: framework pattern matching
+    frameworks = detect_framework(repo_path)
 
+    # If no frameworks detected, use ALL patterns as fallback
+    if not frameworks:
+        frameworks = list(FRAMEWORK_PATTERNS.keys())
+    elif "generic" not in frameworks:
+        frameworks.append("generic")
+
+    # Collect all patterns for detected frameworks
+    patterns: list[str] = []
+    for fw in frameworks:
+        patterns.extend(FRAMEWORK_PATTERNS.get(fw, []))
+
+    # Compile patterns
+    compiled = [re.compile(p) for p in patterns]
+
+    results: list[EntryPoint] = []
     for fp in file_paths:
         path = Path(fp)
         if path.suffix != ".py":
@@ -76,7 +214,7 @@ def detect_entry_points(file_paths: list[str]) -> list[EntryPoint]:
         except OSError:
             continue
 
-        for pattern in _COMPILED_PATTERNS:
+        for pattern in compiled:
             match = pattern.search(source)
             if match:
                 results.append(EntryPoint(
@@ -85,7 +223,54 @@ def detect_entry_points(file_paths: list[str]) -> list[EntryPoint]:
                 ))
                 break  # one match per file is sufficient
 
+    # Filter out __main__.py
+    results = [
+        e for e in results
+        if Path(e["file"]).name != "__main__.py"
+    ]
+
     return results
+
+
+# ---------------------------------------------------------------------------
+# Graph-based entry-point detection
+# ---------------------------------------------------------------------------
+
+def detect_entry_points_from_graph(
+    graph: nx.DiGraph,
+    files: list[str],
+) -> list[str]:
+    """Detect entry points using graph structure.
+
+    An entry point is a node with **zero incoming edges** and **at least one
+    outgoing edge** — i.e. it imports other modules but nothing imports it.
+
+    ``__init__.py``, ``conftest.py``, ``setup.py``, migration files, and
+    ``test_*`` files are excluded as noise.
+
+    Args:
+        graph: Directed dependency graph.
+        files: All file paths in the repo (unused but kept for interface
+               consistency).
+
+    Returns:
+        List of file path strings identified as entry points.
+    """
+    noise = {"__init__", "conftest", "setup", "migrate"}
+
+    entries: list[str] = []
+    for node in graph.nodes:
+        name = Path(node).stem.lower()
+        if name == "__main__":
+            continue
+        if any(n in name for n in noise):
+            continue
+        if name.startswith("test_"):
+            continue
+        if graph.in_degree(node) == 0 and graph.out_degree(node) > 0:
+            entries.append(node)
+
+    return entries
 
 
 # ---------------------------------------------------------------------------

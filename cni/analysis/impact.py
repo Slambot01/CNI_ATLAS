@@ -76,6 +76,7 @@ def analyze_impact(
     graph: nx.DiGraph,
     target: str,
     file_paths: list[str],
+    repo_path: str = ".",
 ) -> ImpactReport:
     """Analyze the impact of modifying a file.
 
@@ -86,6 +87,7 @@ def analyze_impact(
         graph:      Directed dependency graph.
         target:     Full path of the file being analyzed.
         file_paths: All file paths in the repo (for entry point detection).
+        repo_path:  Root path of the repository (for framework detection).
 
     Returns:
         An :class:`ImpactReport` dict.
@@ -97,7 +99,7 @@ def analyze_impact(
     transitive = set(dependents.keys())
 
     # Detect entry points for scoring
-    ep_files = {ep["file"] for ep in detect_entry_points(file_paths)}
+    ep_files = {ep["file"] for ep in detect_entry_points(file_paths, repo_path=repo_path)}
 
     # Count services (unique top-level directories)
     services: set[str] = set()

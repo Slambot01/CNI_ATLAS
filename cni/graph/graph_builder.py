@@ -1,5 +1,5 @@
 """
-cni/graph/dependency_graph.py
+cni/graph/graph_builder.py
 
 Builds and queries directed dependency graphs from repository source files.
 

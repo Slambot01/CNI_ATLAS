@@ -54,7 +54,7 @@ class TestAnalyzeImpact:
         g.add_edge(str(ep), "src/core.py")
         g.add_node("src/core.py")
 
-        report = analyze_impact(g, "src/core.py", [str(ep), "src/core.py"])
+        report = analyze_impact(g, "src/core.py", [str(ep), "src/core.py"], repo_path=str(tmp_path))
 
         # The entry point dependent should have a score ≥ 3
         scores = [d["score"] for d in report["critical_dependents"]]

@@ -99,23 +99,23 @@ Repository statistics
 ### Path
 
 ```bash
-$ cni path cni/cli/main.py cni/graph/dependency_graph.py
+$ cni path cni/cli/main.py cni/graph/graph_builder.py
 Scanning repository...
 Building dependency graph...
 Searching dependency path...
 main.py
-  → dependency_graph.py
+  → graph_builder.py
 ```
 
 ### Explain
 
 ```bash
-$ cni explain dependency_graph.py
+$ cni explain graph_builder.py
 Scanning repository...
 Building dependency graph...
 Analyzing file...
 
-File: dependency_graph.py
+File: graph_builder.py
 Imports:
   repo_scanner.py
 Imported by:
@@ -163,7 +163,7 @@ cni/
 │   └── repo_scanner.py      # Repository file scanner
 ├── graph/
 │   ├── __init__.py
-│   ├── dependency_graph.py   # Dependency graph builder
+│   ├── graph_builder.py       # Dependency graph builder
 │   └── export.py             # Graphviz export with clustering
 ├── analysis/
 │   ├── __init__.py

@@ -1,5 +1,6 @@
 # Python build artefacts
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 *.egg-info/
@@ -25,15 +26,22 @@ htmlcov/
 test_*_error.log
 
 # Generated graph PNGs (except the example in docs/)
+*.png
+!docs/example_graph.png
 dependency_graph.png
 my_repo_graph.png
 generated_graph.png
 test_graph
 *.gv
 
+# Cache directories
+.cache/
+sentence_transformers_cache/
+
 # Local dev scripts
 validate_suite.py
 cni/validate_suite.py
+ask_output.txt
 
 # OS files
 .DS_Store
@@ -45,3 +53,9 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+
+# Node
+node_modules/
+
+# Environment
+.env

@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "typer",
     "networkx",
-    "graphviz",
+    "matplotlib",
     "requests",
     "sentence-transformers",
     "numpy"

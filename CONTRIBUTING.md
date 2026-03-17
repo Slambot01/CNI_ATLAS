@@ -80,7 +80,7 @@ cni doctor
 | `cni/__main__.py` | Enables `python -m cni`; delegates to `cli/main.py`. |
 | `cni/cli/main.py` | Typer CLI entry point; defines all commands. |
 | `cni/analyzer/repo_scanner.py` | Recursively walks the repo and extracts imports from Python files. |
-| `cni/graph/dependency_graph.py` | Builds a `networkx.DiGraph` from file paths; resolves Python and JS/TS imports. |
+| `cni/graph/graph_builder.py` | Builds a `networkx.DiGraph` from file paths; resolves Python and JS/TS imports. |
 | `cni/graph/export.py` | Renders the graph to PNG/SVG/PDF via Graphviz; supports depth/import/cluster filters. |
 | `cni/analysis/path_finder.py` | Finds the shortest dependency path between two files using BFS. |
 | `cni/analysis/explainer.py` | Shows what a file imports and which files import it. |
@@ -113,7 +113,7 @@ cni doctor
 ## Adding Support for a New Language
 
 1. Add the file extension to `SUPPORTED_EXTENSIONS` in `cni/analyzer/repo_scanner.py`
-2. Add an import extractor function `_extract_<language>_imports()` in `cni/graph/dependency_graph.py`
+2. Add an import extractor function `_extract_<language>_imports()` in `cni/graph/graph_builder.py`
 3. Add a resolver function `_resolve_<language>_import()` in the same file
 4. Register both in the `extract_imports()` and `resolve_import()` dispatcher functions
 5. Add tests in `tests/test_repo_scanner.py`

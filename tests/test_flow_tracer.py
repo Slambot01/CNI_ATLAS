@@ -23,7 +23,7 @@ class TestDetectEntryPoints:
             "def home():\n"
             "    return 'Hello'\n"
         )
-        results = detect_entry_points([str(ep)])
+        results = detect_entry_points([str(ep)], repo_path=str(tmp_path))
         assert len(results) == 1
         assert results[0]["decorator"] == "@app.route"
 
@@ -35,7 +35,7 @@ class TestDetectEntryPoints:
             "async def list_users():\n"
             "    pass\n"
         )
-        results = detect_entry_points([str(ep)])
+        results = detect_entry_points([str(ep)], repo_path=str(tmp_path))
         assert len(results) == 1
         assert results[0]["decorator"] == "@router.get"
 

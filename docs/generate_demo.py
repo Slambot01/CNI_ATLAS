@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from cni.analyzer.repo_scanner import scan_repository
-from cni.graph.dependency_graph import build_dependency_graph
+from cni.graph.graph_builder import build_dependency_graph
 from cni.graph.export import export_graph
 
 files = scan_repository(".")
