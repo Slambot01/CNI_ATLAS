@@ -29,16 +29,29 @@ function getFolderFromId(id) {
   return 'root';
 }
 
+// ─── Constants for layout math ───
+const SIDEBAR_W = 64;
+const HEADER_H = 56;
+const FILTER_H = 42;
+const STATUS_H = 36;
+const PANEL_W = 320;
+
 export default function GraphPage() {
   const ForceGraph2D = useForceGraph();
   const { repoPath, stats } = useAnalysisContext();
   const { graphData, loading, error, fetchGraph } = useGraph();
   const fgRef = useRef(null);
-  const containerRef = useRef(null);
-  const graphWrapperRef = useRef(null);
 
-  // Dimensions via ResizeObserver
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  // ── Dimensions: simple window-based calc ──
+  const [graphW, setGraphW] = useState(800);
+  const [graphH, setGraphH] = useState(600);
+
+  const updateSize = useCallback((panelOpen) => {
+    const w = window.innerWidth - SIDEBAR_W - (panelOpen ? PANEL_W : 0);
+    const h = window.innerHeight - HEADER_H - FILTER_H - STATUS_H;
+    setGraphW(Math.max(w, 100));
+    setGraphH(Math.max(h, 100));
+  }, []);
 
   // Filters
   const [hideTests, setHideTests] = useState(true);
@@ -64,40 +77,30 @@ export default function GraphPage() {
   // Controls
   const [physicsLocked, setPhysicsLocked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [engineStopped, setEngineStopped] = useState(false);
+  const [hasAutoFit, setHasAutoFit] = useState(false);
+
+  const panelOpen = !!selectedNode;
+
+  // Resize listener
+  useEffect(() => {
+    updateSize(panelOpen);
+    const onResize = () => updateSize(panelOpen);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [panelOpen, updateSize]);
 
   useEffect(() => {
     if (repoPath && stats) fetchGraph(repoPath);
   }, [repoPath, stats, fetchGraph]);
 
-  // ResizeObserver — observe the wrapper div that has layout dimensions
-  useEffect(() => {
-    const wrapper = graphWrapperRef.current;
-    if (!wrapper) return;
-
-    const measure = () => {
-      const rect = wrapper.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setDimensions({ width: Math.floor(rect.width), height: Math.floor(rect.height) });
-      }
-    };
-
-    // Initial measurement
-    measure();
-
-    const observer = new ResizeObserver(() => measure());
-    observer.observe(wrapper);
-    return () => observer.disconnect();
-  }, []);
-
-  // Track fullscreen changes
+  // Fullscreen
   useEffect(() => {
     const handler = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // Build folder color map
+  // Folder color map
   const folderColorMap = useMemo(() => {
     const folders = new Map();
     graphData.nodes.forEach(n => {
@@ -109,7 +112,7 @@ export default function GraphPage() {
     return map;
   }, [graphData.nodes]);
 
-  // Detect circular deps
+  // Circular deps
   const circularPairs = useMemo(() => {
     const edgeSet = new Set();
     graphData.links.forEach(l => {
@@ -129,11 +132,11 @@ export default function GraphPage() {
   // Filtered data
   const filteredData = useMemo(() => {
     const isTest = (label) => /\.test\.|_test\.|test_|\.spec\./i.test(label);
-    const isInit = (label) => label === '__init__.py';
+    const isInitFile = (label) => label === '__init__.py';
     const nodeSet = new Set();
     const nodes = graphData.nodes.filter(n => {
       if (hideTests && isTest(n.label)) return false;
-      if (hideInit && isInit(n.label)) return false;
+      if (hideInit && isInitFile(n.label)) return false;
       const totalConn = (n.indegree || 0) + (n.outdegree || 0);
       if (hideIsolated && totalConn === 0) return false;
       if (totalConn < minConn) return false;
@@ -148,7 +151,7 @@ export default function GraphPage() {
     return { nodes, links };
   }, [graphData, hideTests, hideIsolated, hideInit, minConn]);
 
-  // Search autocomplete
+  // Search
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     const q = searchQuery.toLowerCase();
@@ -190,7 +193,6 @@ export default function GraphPage() {
 
   const handleNodeHover = useCallback((node) => {
     setHoverNode(node || null);
-    if (containerRef.current) containerRef.current.style.cursor = node ? 'pointer' : 'default';
   }, []);
 
   const handleBgClick = useCallback(() => {
@@ -213,21 +215,20 @@ export default function GraphPage() {
 
   const handleDetailNodeClick = useCallback((targetLabel) => {
     const node = filteredData.nodes.find(n => n.label === targetLabel || n.id.endsWith(targetLabel));
-    if (node && fgRef.current) handleSearchSelect(node);
+    if (node) handleSearchSelect(node);
   }, [filteredData.nodes, handleSearchSelect]);
 
-  // Auto-center on first engine stop (with retry for safety)
+  // Auto-fit once after first render
   const handleEngineStop = useCallback(() => {
-    if (!engineStopped) {
-      setEngineStopped(true);
-      // Delay to ensure canvas is rendered at full size
+    if (!hasAutoFit && fgRef.current) {
+      setHasAutoFit(true);
       setTimeout(() => {
-        try { fgRef.current?.zoomToFit(400, 50); } catch (_) {}
-      }, 200);
+        try { fgRef.current?.zoomToFit(400, 60); } catch (_) {}
+      }, 300);
     }
-  }, [engineStopped]);
+  }, [hasAutoFit]);
 
-  // Custom node painting
+  // ── Node painting ──
   const paintNode = useCallback((node, ctx, globalScale) => {
     const isActive = highlightNodes.size === 0 || highlightNodes.has(node.id);
     const isSearched = searchHighlight === node.id;
@@ -236,15 +237,15 @@ export default function GraphPage() {
     const alpha = isActive ? 1 : 0.1;
     const color = getNodeColor(node);
 
-    const r = parseInt(color.slice(1, 3), 16) || 100;
-    const g = parseInt(color.slice(3, 5), 16) || 150;
-    const b = parseInt(color.slice(5, 7), 16) || 250;
+    const cr = parseInt(color.slice(1, 3), 16) || 100;
+    const cg = parseInt(color.slice(3, 5), 16) || 150;
+    const cb = parseInt(color.slice(5, 7), 16) || 250;
 
     if (isActive || isSearched) {
       const glowAlpha = isSearched ? 0.3 : isHovered ? 0.2 : 0.12;
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius + (isSearched ? 8 : 4), 0, 2 * Math.PI);
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${glowAlpha})`;
+      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${glowAlpha})`;
       ctx.fill();
     }
 
@@ -269,6 +270,7 @@ export default function GraphPage() {
     }
   }, [highlightNodes, hoverNode, searchHighlight, getNodeColor]);
 
+  // ── Edge color ──
   const getLinkColor = useCallback((link) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
@@ -286,76 +288,65 @@ export default function GraphPage() {
     return 'rgba(71, 85, 105, 0.08)';
   }, [highlightLinks, circularPairs, filteredData.nodes]);
 
-  // === Floating control handlers ===
+  // ── Control handlers ──
   const handleZoomIn = useCallback(() => {
-    const fg = fgRef.current;
-    if (!fg) return;
     try {
+      const fg = fgRef.current;
+      if (!fg) return;
       const cur = fg.zoom();
       if (typeof cur === 'number') fg.zoom(cur * 1.5, 300);
-    } catch (e) { console.warn('Zoom in failed:', e); }
+    } catch (_) {}
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    const fg = fgRef.current;
-    if (!fg) return;
     try {
+      const fg = fgRef.current;
+      if (!fg) return;
       const cur = fg.zoom();
       if (typeof cur === 'number') fg.zoom(cur / 1.5, 300);
-    } catch (e) { console.warn('Zoom out failed:', e); }
+    } catch (_) {}
   }, []);
 
   const handleFitView = useCallback(() => {
-    try {
-      fgRef.current?.zoomToFit(400, 50);
-      setTimeout(() => {
-        try { fgRef.current?.zoomToFit(400, 50); } catch (_) {}
-      }, 100);
-    } catch (e) { console.warn('Fit view failed:', e); }
+    try { fgRef.current?.zoomToFit(400, 60); } catch (_) {}
   }, []);
 
   const handleFullscreen = useCallback(() => {
-    if (!graphWrapperRef.current) return;
     try {
+      const el = document.querySelector('.graph-page-root');
+      if (!el) return;
       if (document.fullscreenElement) document.exitFullscreen();
-      else graphWrapperRef.current.requestFullscreen();
-    } catch (e) { console.warn('Fullscreen failed:', e); }
+      else el.requestFullscreen();
+    } catch (_) {}
   }, []);
 
   const handleTogglePhysics = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    if (physicsLocked) {
-      // Unlock: reheat simulation
-      try { fg.d3ReheatSimulation(); } catch (_) {}
+    if (!physicsLocked) {
+      // Lock: fix all nodes
+      filteredData.nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
     } else {
-      // Lock: freeze all nodes in place
-      try {
-        fg.cooldownTicks(0);
-        // Fix all node positions to freeze them
-        filteredData.nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
-      } catch (_) {}
-    }
-    if (physicsLocked) {
-      // Unfreeze all nodes
+      // Unlock: release all nodes
       filteredData.nodes.forEach(n => { n.fx = undefined; n.fy = undefined; });
+      try { fg.d3ReheatSimulation(); } catch (_) {}
     }
     setPhysicsLocked(!physicsLocked);
   }, [physicsLocked, filteredData.nodes]);
 
   const handleScreenshot = useCallback(() => {
     try {
-      const canvas = containerRef.current?.querySelector('canvas');
+      const canvas = document.querySelector('.graph-page-root canvas');
       if (!canvas) return;
       const url = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = url;
       a.download = `cni-graph-${Date.now()}.png`;
       a.click();
-    } catch (e) { console.warn('Screenshot failed:', e); }
+    } catch (_) {}
   }, []);
 
-  // === Not analyzed state ===
+  // ── Not analyzed state ──
   if (!repoPath || !stats) {
     return (
       <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 5.75rem)' }}>
@@ -364,12 +355,10 @@ export default function GraphPage() {
     );
   }
 
-  const panelOpen = !!selectedNode;
-
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: 'calc(100vh - 5.75rem)' }}>
+    <div className="graph-page-root" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 5.75rem)', overflow: 'hidden' }}>
       {/* ══════ Filter bar ══════ */}
-      <div className="flex items-center gap-3 px-4 py-2 flex-shrink-0" style={{ borderBottom: '1px solid var(--cni-border)', background: 'var(--cni-surface)' }}>
+      <div className="flex items-center gap-3 px-4 py-2" style={{ flexShrink: 0, borderBottom: '1px solid var(--cni-border)', background: 'var(--cni-surface)' }}>
         {[
           { label: 'Hide tests', value: hideTests, set: setHideTests },
           { label: 'Hide isolated', value: hideIsolated, set: setHideIsolated },
@@ -426,39 +415,37 @@ export default function GraphPage() {
         </span>
       </div>
 
-      {/* ══════ Graph + Side Panel ══════ */}
-      <div className="flex flex-1 min-h-0">
-        {/* Graph wrapper — flex child that gets layout size */}
-        <div ref={graphWrapperRef} className="flex-1 min-h-0 min-w-0 relative overflow-hidden" style={{ background: '#060a13' }}>
-          {/* Canvas container — absolutely fills the wrapper */}
-          <div ref={containerRef} className="graph-canvas-wrap" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      {/* ══════ Graph + Panel row ══════ */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
+        {/* Graph area */}
+        <div style={{ position: 'relative', width: graphW, height: graphH, background: '#060a13' }}>
           {loading && (
-            <div className="absolute inset-0 flex items-center justify-center z-10" style={{ background: 'rgba(6, 10, 19, 0.85)' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, background: 'rgba(6,10,19,0.85)' }}>
               <div className="text-center space-y-3">
                 <div className="w-8 h-8 mx-auto border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
                 <p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Building graph…</p>
               </div>
             </div>
           )}
+
           {error && (
-            <div className="absolute top-4 left-4 right-4 z-10 px-4 py-3 rounded-xl text-sm"
-              style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+            <div className="px-4 py-3 rounded-xl text-sm" style={{ position: 'absolute', top: 16, left: 16, right: 16, zIndex: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
               {error}
             </div>
           )}
 
           {!ForceGraph2D && (
-            <div className="flex items-center justify-center h-full">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
               <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
             </div>
           )}
 
-          {ForceGraph2D && filteredData.nodes.length > 0 && dimensions.width > 0 && (
+          {ForceGraph2D && filteredData.nodes.length > 0 && (
             <ForceGraph2D
               ref={fgRef}
               graphData={filteredData}
-              width={dimensions.width}
-              height={dimensions.height}
+              width={graphW}
+              height={graphH}
               backgroundColor="#060a13"
               nodeCanvasObject={paintNode}
               nodePointerAreaPaint={(node, color, ctx) => {
@@ -485,27 +472,27 @@ export default function GraphPage() {
             />
           )}
 
-          {/* ── Hover tooltip ── */}
+          {/* Hover tooltip */}
           {hoverNode && (
-            <div className="absolute z-20 px-3 py-2 rounded-xl text-xs pointer-events-none animate-fade-in"
-              style={{ left: 16, bottom: 16, background: 'rgba(12, 18, 32, 0.9)', border: '1px solid var(--cni-border)', backdropFilter: 'blur(8px)' }}>
-              <p className="font-mono font-semibold" style={{ color: 'var(--cni-text)' }}>{hoverNode.label}</p>
-              <p style={{ color: 'var(--cni-muted)' }} className="mt-0.5">📁 {getFolderFromId(hoverNode.id)}</p>
-              <p style={{ color: 'var(--cni-muted)' }}>
+            <div style={{ position: 'absolute', left: 16, bottom: 16, background: 'rgba(12,18,32,0.92)', border: '1px solid var(--cni-border)', backdropFilter: 'blur(8px)', borderRadius: 12, padding: '8px 12px', zIndex: 20, pointerEvents: 'none' }}
+              className="animate-fade-in">
+              <p className="font-mono font-semibold text-xs" style={{ color: 'var(--cni-text)' }}>{hoverNode.label}</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--cni-muted)' }}>📁 {getFolderFromId(hoverNode.id)}</p>
+              <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>
                 in: <span style={{ color: '#60a5fa' }}>{hoverNode.indegree}</span>{' · '}out: <span style={{ color: '#22d3ee' }}>{hoverNode.outdegree}</span>
               </p>
             </div>
           )}
 
-          {/* ── Color legend ── */}
-          <div className="absolute bottom-14 left-3 z-10">
+          {/* Color legend */}
+          <div style={{ position: 'absolute', bottom: 56, left: 12, zIndex: 10 }}>
             <button onClick={() => setShowLegend(!showLegend)} className="px-2 py-1 rounded-lg text-xs"
-              style={{ background: 'rgba(12, 18, 32, 0.85)', border: '1px solid var(--cni-border)', color: 'var(--cni-muted)' }}>
+              style={{ background: 'rgba(12,18,32,0.85)', border: '1px solid var(--cni-border)', color: 'var(--cni-muted)' }}>
               {showLegend ? '▼ Legend' : '▶ Legend'}
             </button>
             {showLegend && (
               <div className="mt-1 p-3 rounded-xl animate-fade-in max-h-48 overflow-y-auto"
-                style={{ background: 'rgba(12, 18, 32, 0.92)', border: '1px solid var(--cni-border)', minWidth: 140 }}>
+                style={{ background: 'rgba(12,18,32,0.92)', border: '1px solid var(--cni-border)', minWidth: 140 }}>
                 {colorMode === 'folder' ? (
                   Object.entries(folderColorMap).slice(0, 12).map(([folder, color]) => (
                     <div key={folder} className="flex items-center gap-2 py-0.5">
@@ -530,14 +517,13 @@ export default function GraphPage() {
             )}
           </div>
 
-          {/* ══════ Floating Controls ══════ */}
-          <div className="absolute z-50 flex flex-col gap-2" style={{
-            bottom: 20, right: 20,
-            background: 'rgba(10, 10, 15, 0.85)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: 12, padding: 8,
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+          {/* ══ Floating Controls ══ */}
+          <div style={{
+            position: 'absolute', bottom: 20, right: 20, zIndex: 50,
+            display: 'flex', flexDirection: 'column', gap: 6,
+            background: 'rgba(10,10,15,0.85)', backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12,
+            padding: 6, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
           }}>
             {[
               { icon: <ZoomIn size={18} />, label: 'Zoom In', onClick: handleZoomIn },
@@ -547,49 +533,37 @@ export default function GraphPage() {
               { icon: physicsLocked ? <Lock size={18} /> : <Unlock size={18} />, label: physicsLocked ? 'Unlock Physics' : 'Lock Physics', onClick: handleTogglePhysics, active: physicsLocked },
               { icon: <Camera size={18} />, label: 'Screenshot', onClick: handleScreenshot },
             ].map(({ icon, label, onClick, active }) => (
-              <button
-                key={label}
-                onClick={onClick}
-                tabIndex={0}
-                aria-label={label}
-                className="relative group flex items-center justify-center transition-all duration-200"
+              <button key={label} onClick={onClick} tabIndex={0} aria-label={label}
+                className="relative group"
                 style={{
-                  width: 36, height: 36,
-                  borderRadius: 8, border: 'none',
-                  background: active ? 'rgba(255, 150, 50, 0.15)' : 'transparent',
-                  color: active ? '#f59e0b' : 'rgba(255, 255, 255, 0.6)',
-                  cursor: 'pointer',
+                  width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 8, border: 'none', cursor: 'pointer',
+                  background: active ? 'rgba(255,150,50,0.15)' : 'transparent',
+                  color: active ? '#f59e0b' : 'rgba(255,255,255,0.6)',
+                  transition: 'all 0.2s ease',
                 }}
-                onMouseEnter={e => {
-                  if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; }
-                }}
-                onMouseLeave={e => {
-                  if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }
-                }}
-              >
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; } }}>
                 {icon}
-                {/* Tooltip — left side */}
-                <span className="absolute right-full mr-2 px-2 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 delay-200"
-                  style={{ background: 'rgba(12, 18, 32, 0.95)', border: '1px solid var(--cni-border)', color: '#e2e8f0' }}>
+                <span className="absolute right-full mr-2 px-2 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200"
+                  style={{ background: 'rgba(12,18,32,0.95)', border: '1px solid var(--cni-border)', color: '#e2e8f0', transitionDelay: '200ms' }}>
                   {label}
                 </span>
               </button>
             ))}
           </div>
         </div>
-        </div>
 
         {/* ══════ Side Panel ══════ */}
         {panelOpen && (
-          <div className="w-80 overflow-y-auto animate-slide-in-right flex-shrink-0"
-            style={{ background: 'var(--cni-surface)', borderLeft: '1px solid var(--cni-border)' }}>
+          <div style={{ width: PANEL_W, flexShrink: 0, background: 'var(--cni-surface)', borderLeft: '1px solid var(--cni-border)', overflowY: 'auto' }}
+            className="animate-slide-in-right">
             <div className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold" style={{ color: 'var(--cni-text)' }}>Node Details</h3>
                 <button onClick={handleBgClick} className="text-lg leading-none transition-colors" style={{ color: 'var(--cni-muted)' }}
                   onMouseEnter={e => e.currentTarget.style.color = 'var(--cni-text)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}>×</button>
               </div>
-
               <div className="space-y-4">
                 <div>
                   <p className="text-xs mb-1" style={{ color: 'var(--cni-muted)' }}>📄 Filename</p>
@@ -599,7 +573,6 @@ export default function GraphPage() {
                   <p className="text-xs mb-1" style={{ color: 'var(--cni-muted)' }}>📁 Path</p>
                   <p className="text-xs font-mono break-all" style={{ color: 'var(--cni-muted)' }}>{selectedNode.id}</p>
                 </div>
-
                 <div className="flex gap-4">
                   <div className="glass-card p-3 flex-1 text-center">
                     <p className="text-xs mb-0.5" style={{ color: 'var(--cni-muted)' }}>In-degree</p>
@@ -610,7 +583,6 @@ export default function GraphPage() {
                     <p className="text-xl font-bold" style={{ color: '#22d3ee' }}>{selectedNode.outdegree}</p>
                   </div>
                 </div>
-
                 {detailsLoading ? (
                   <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--cni-muted)' }}>
                     <div className="w-3 h-3 border rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
@@ -650,7 +622,6 @@ export default function GraphPage() {
                     </div>
                   </>
                 ) : null}
-
                 <div className="flex gap-2 pt-2">
                   <a href={`/impact?file=${encodeURIComponent(selectedNode.label)}`}
                     className="btn-primary text-xs flex-1 text-center py-2">⚡ Impact</a>
