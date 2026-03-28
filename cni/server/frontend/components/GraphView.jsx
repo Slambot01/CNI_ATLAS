@@ -1,2 +1,2 @@
 'use client';
-export { default } from '../../app/graph/page';
+export { default } from '../app/graph/page';

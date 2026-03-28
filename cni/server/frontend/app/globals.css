@@ -117,25 +117,3 @@
   75% { content: '...'; }
 }
 
-/* ReactFlow overrides */
-.react-flow__minimap {
-  border-radius: 8px !important;
-  overflow: hidden !important;
-  border: 1px solid var(--cni-border) !important;
-}
-
-.react-flow__controls {
-  border-radius: 8px !important;
-  border: 1px solid var(--cni-border) !important;
-  overflow: hidden !important;
-}
-
-.react-flow__controls-button {
-  background: var(--cni-surface) !important;
-  border-bottom-color: var(--cni-border) !important;
-  fill: #94a3b8 !important;
-}
-
-.react-flow__controls-button:hover {
-  background: #1a1a2e !important;
-}
