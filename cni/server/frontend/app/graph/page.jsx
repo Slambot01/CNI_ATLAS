@@ -1,20 +1,21 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import dynamic from 'next/dynamic';
 import { useGraph } from '../../hooks/useGraph';
 import { useAnalysisContext } from '../client-layout';
 import { explainFile } from '../../lib/api';
 import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera } from 'lucide-react';
 
-const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full">
-      <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
-    </div>
-  ),
-});
+// Manual dynamic import that preserves ref forwarding
+function useForceGraph() {
+  const [Component, setComponent] = useState(null);
+  useEffect(() => {
+    import('react-force-graph-2d').then((mod) => {
+      setComponent(() => mod.default || mod);
+    });
+  }, []);
+  return Component;
+}
 
 const FOLDER_COLORS = [
   '#8b5cf6', '#3b82f6', '#22d3ee', '#10b981', '#f59e0b',
@@ -29,6 +30,7 @@ function getFolderFromId(id) {
 }
 
 export default function GraphPage() {
+  const ForceGraph2D = useForceGraph();
   const { repoPath, stats } = useAnalysisContext();
   const { graphData, loading, error, fetchGraph } = useGraph();
   const fgRef = useRef(null);
@@ -280,48 +282,62 @@ export default function GraphPage() {
 
   // === Floating control handlers ===
   const handleZoomIn = useCallback(() => {
-    if (!fgRef.current) return;
-    const cur = fgRef.current.zoom();
-    fgRef.current.zoom(cur * 1.5, 300);
+    const fg = fgRef.current;
+    if (!fg) return;
+    try {
+      const cur = fg.zoom();
+      if (typeof cur === 'number') fg.zoom(cur * 1.5, 300);
+    } catch (e) { console.warn('Zoom in failed:', e); }
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    if (!fgRef.current) return;
-    const cur = fgRef.current.zoom();
-    fgRef.current.zoom(cur / 1.5, 300);
+    const fg = fgRef.current;
+    if (!fg) return;
+    try {
+      const cur = fg.zoom();
+      if (typeof cur === 'number') fg.zoom(cur / 1.5, 300);
+    } catch (e) { console.warn('Zoom out failed:', e); }
   }, []);
 
   const handleFitView = useCallback(() => {
-    fgRef.current?.zoomToFit(400, 50);
+    try { fgRef.current?.zoomToFit(400, 50); }
+    catch (e) { console.warn('Fit view failed:', e); }
   }, []);
 
   const handleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      containerRef.current.requestFullscreen();
-    }
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else containerRef.current.requestFullscreen();
+    } catch (e) { console.warn('Fullscreen failed:', e); }
   }, []);
 
   const handleTogglePhysics = useCallback(() => {
-    if (!fgRef.current) return;
-    if (physicsLocked) {
-      fgRef.current.resumeAnimation();
-    } else {
-      fgRef.current.pauseAnimation();
-    }
+    const fg = fgRef.current;
+    if (!fg) return;
+    try {
+      if (physicsLocked) {
+        // Unlock: reheat the simulation
+        fg.d3ReheatSimulation();
+      } else {
+        // Lock: stop simulation immediately
+        fg.cooldownTicks(0);
+        fg.d3Force('charge').strength(0);
+      }
+    } catch (e) { console.warn('Physics toggle failed:', e); }
     setPhysicsLocked(!physicsLocked);
   }, [physicsLocked]);
 
   const handleScreenshot = useCallback(() => {
-    const canvas = containerRef.current?.querySelector('canvas');
-    if (!canvas) return;
-    const url = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `cni-graph-${Date.now()}.png`;
-    a.click();
+    try {
+      const canvas = containerRef.current?.querySelector('canvas');
+      if (!canvas) return;
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cni-graph-${Date.now()}.png`;
+      a.click();
+    } catch (e) { console.warn('Screenshot failed:', e); }
   }, []);
 
   // === Not analyzed state ===
@@ -414,7 +430,13 @@ export default function GraphPage() {
             </div>
           )}
 
-          {filteredData.nodes.length > 0 && dimensions.width > 0 && (
+          {!ForceGraph2D && (
+            <div className="flex items-center justify-center h-full">
+              <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
+            </div>
+          )}
+
+          {ForceGraph2D && filteredData.nodes.length > 0 && dimensions.width > 0 && (
             <ForceGraph2D
               ref={fgRef}
               graphData={filteredData}
