@@ -7,7 +7,7 @@ import { useAnalysisContext } from '../client-layout';
 import { explainFile } from '../../lib/api';
 
 // Must disable SSR — react-force-graph needs browser Canvas API
-const ForceGraph2D = dynamic(() => import('react-force-graph').then(mod => mod.ForceGraph2D), {
+const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-full">
