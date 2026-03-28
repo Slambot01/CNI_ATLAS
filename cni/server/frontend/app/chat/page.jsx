@@ -23,7 +23,7 @@ export default function ChatPage() {
     startNewSession,
     loadSession,
     removeSession,
-  } = useChat(repoPath);
+  } = useChat();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
   const sessionsRef = useRef(null);
@@ -58,7 +58,7 @@ export default function ChatPage() {
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     try {
-      const d = new Date(dateStr + 'Z'); // treat as UTC
+      const d = new Date(dateStr + 'Z');
       const now = new Date();
       const diffMs = now - d;
       const diffMin = Math.floor(diffMs / 60000);
@@ -137,6 +137,19 @@ export default function ChatPage() {
               </button>
             )}
 
+            {messages.length > 0 && (
+              <button
+                onClick={clearChat}
+                title="Clear chat"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-all duration-200"
+                style={{ border: '1px solid var(--cni-border)', color: 'var(--cni-muted)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; e.currentTarget.style.color = '#f87171'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+
             {/* Sessions dropdown */}
             {sessionsOpen && sessions.length > 0 && (
               <div
@@ -164,7 +177,6 @@ export default function ChatPage() {
                         if (s.session_id !== sessionId) e.currentTarget.style.background = 'transparent';
                       }}
                     >
-                      {/* Active dot */}
                       {s.session_id === sessionId && (
                         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#6366f1' }} />
                       )}

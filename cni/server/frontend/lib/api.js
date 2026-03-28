@@ -23,9 +23,9 @@ function parseError(err) {
   // Network / connection error
   if (!err.response) {
     if (err.code === 'ECONNABORTED') {
-      return { error: true, message: 'Request timed out', hint: 'Try a smaller repo or increase timeout.' };
+      return { error: true, status: 0, message: 'Request timed out', hint: 'Try a smaller repo or increase timeout.' };
     }
-    return { error: true, message: 'Cannot connect to CNI backend', hint: 'Make sure cni serve is running.' };
+    return { error: true, status: 0, message: 'Cannot connect to CNI backend', hint: 'Make sure cni serve is running.' };
   }
 
   const status = err.response.status;
@@ -35,6 +35,7 @@ function parseError(err) {
   if (status === 400) {
     return {
       error: true,
+      status,
       notAnalyzed: !!(body?.error && body?.hint),
       message: body?.error || body?.detail || 'Bad request',
       hint: body?.hint || body?.detail || '',
@@ -43,20 +44,20 @@ function parseError(err) {
 
   // 404
   if (status === 404) {
-    return { error: true, message: body?.detail || 'Not found', hint: '' };
+    return { error: true, status, message: body?.detail || 'Not found', hint: '' };
   }
 
   // 500 — server error, possibly Ollama down
   if (status === 500) {
     const detail = body?.detail || '';
     if (detail.toLowerCase().includes('ollama') || detail.toLowerCase().includes('llm')) {
-      return { error: true, message: 'LLM request failed', hint: 'Make sure Ollama is running: ollama serve' };
+      return { error: true, status, message: 'LLM request failed', hint: 'Make sure Ollama is running: ollama serve' };
     }
-    return { error: true, message: detail || 'Server error', hint: 'Check the CNI server logs for details.' };
+    return { error: true, status, message: detail || 'Server error', hint: 'Check the CNI server logs for details.' };
   }
 
   // Other errors
-  return { error: true, message: body?.detail || err.message || 'Unknown error', hint: '' };
+  return { error: true, status: status || 0, message: body?.detail || err.message || 'Unknown error', hint: '' };
 }
 
 /** POST /api/analyze */
@@ -75,7 +76,7 @@ export async function getGraph(path) {
     const { data } = await API.get('/api/graph', { params: { path } });
     // Handle 200 response that's actually an error body from JSONResponse
     if (data?.error && data?.hint) {
-      return { error: true, notAnalyzed: true, message: data.error, hint: data.hint };
+      return { error: true, status: 400, notAnalyzed: true, message: data.error, hint: data.hint };
     }
     return data;
   } catch (err) {
@@ -88,7 +89,7 @@ export async function getHealth(path) {
   try {
     const { data } = await API.get('/api/health', { params: { path } });
     if (data?.error && data?.hint) {
-      return { error: true, notAnalyzed: true, message: data.error, hint: data.hint };
+      return { error: true, status: 400, notAnalyzed: true, message: data.error, hint: data.hint };
     }
     return data;
   } catch (err) {
@@ -101,7 +102,7 @@ export async function getOnboard(path) {
   try {
     const { data } = await API.get('/api/onboard', { params: { path } });
     if (data?.error && data?.hint) {
-      return { error: true, notAnalyzed: true, message: data.error, hint: data.hint };
+      return { error: true, status: 400, notAnalyzed: true, message: data.error, hint: data.hint };
     }
     return data;
   } catch (err) {
@@ -114,7 +115,7 @@ export async function getImpact(file, path) {
   try {
     const { data } = await API.post('/api/impact', { file, path });
     if (data?.error && data?.hint) {
-      return { error: true, notAnalyzed: true, message: data.error, hint: data.hint };
+      return { error: true, status: 400, notAnalyzed: true, message: data.error, hint: data.hint };
     }
     return data;
   } catch (err) {
@@ -127,7 +128,7 @@ export async function explainFile(file, path) {
   try {
     const { data } = await API.get('/api/explain', { params: { file, path } });
     if (data?.error && data?.hint) {
-      return { error: true, notAnalyzed: true, message: data.error, hint: data.hint };
+      return { error: true, status: 400, notAnalyzed: true, message: data.error, hint: data.hint };
     }
     return data;
   } catch (err) {

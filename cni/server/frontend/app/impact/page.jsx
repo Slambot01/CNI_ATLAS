@@ -2,17 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { useAnalysisContext } from '../client-layout';
-import { getImpact } from '../../lib/api';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 
 export default function ImpactPage() {
-  const { repoPath, stats } = useAnalysisContext();
+  const {
+    repoPath, stats,
+    impactData: data, impactFile: cachedFile,
+    impactLoading: loading, impactError: error,
+    fetchImpact, setImpactFile, setImpactError,
+  } = useAnalysisContext();
   const [file, setFile] = useState('');
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
 
+  // Sync local input with cached file
+  useEffect(() => {
+    if (cachedFile && !file) setFile(cachedFile);
+  }, [cachedFile, file]);
+
+  // Pre-fill from URL query param
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -23,16 +30,9 @@ export default function ImpactPage() {
 
   const handleAnalyze = async () => {
     if (!file.trim() || !repoPath) return;
-    setLoading(true);
-    setError(null);
-    const result = await getImpact(file.trim(), repoPath);
-    if (result?.error) {
-      setError({ message: result.message, hint: result.hint });
-      setData(null);
-    } else {
-      setData(result);
-    }
-    setLoading(false);
+    setImpactError(null);
+    setImpactFile(file.trim());
+    fetchImpact(file.trim(), repoPath);
   };
 
   if (!repoPath || !stats) return <NotAnalyzed />;

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAppContext } from '../context/AppContext';
 
 const NAV_ITEMS = [
   { href: '/',        label: 'Dashboard', icon: '⬡' },
@@ -14,6 +15,14 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const ctx = useAppContext();
+  const isAnalyzed = ctx?.isAnalyzed;
+  const repoPath = ctx?.repoPath || '';
+
+  // Extract short name from path (last directory segment)
+  const shortName = repoPath
+    ? repoPath.replace(/\\/g, '/').split('/').filter(Boolean).pop() || repoPath
+    : '';
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-16 flex flex-col items-center py-4 z-50"
@@ -54,8 +63,22 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer dot */}
-      <div className="w-2 h-2 rounded-full" style={{ background: '#22c55e', boxShadow: '0 0 6px rgba(34, 197, 94, 0.5)' }} title="Local" />
+      {/* Repo indicator */}
+      <div className="flex flex-col items-center gap-1.5 mb-1 group relative">
+        <div className={`w-2 h-2 rounded-full ${isAnalyzed ? 'animate-pulse-slow' : ''}`}
+          style={{
+            background: isAnalyzed ? '#22c55e' : 'var(--cni-muted)',
+            boxShadow: isAnalyzed ? '0 0 6px rgba(34, 197, 94, 0.5)' : 'none',
+          }}
+          title={isAnalyzed ? `Repo: ${repoPath}` : 'Not analyzed'} />
+        {/* Repo name tooltip */}
+        {shortName && (
+          <span className="absolute bottom-full mb-2 left-full ml-3 px-2.5 py-1.5 rounded-lg text-[10px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200"
+            style={{ background: 'var(--cni-surface-2)', border: '1px solid var(--cni-border)', color: '#4ade80' }}>
+            {shortName}
+          </span>
+        )}
+      </div>
     </aside>
   );
 }

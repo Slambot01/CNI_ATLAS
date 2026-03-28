@@ -1,50 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useAnalysisContext } from '../client-layout';
-import { getHealth } from '../../lib/api';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 
 export default function HealthPage() {
-  const { repoPath, stats } = useAnalysisContext();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const {
+    repoPath, stats,
+    healthData: data, healthLoading: loading, healthError: error,
+    fetchHealth,
+  } = useAnalysisContext();
 
+  // Fetch health data on mount (cached — returns instantly if already loaded)
   useEffect(() => {
     if (repoPath && stats) {
-      setLoading(true);
-      setError(null);
-      getHealth(repoPath)
-        .then((result) => {
-          if (result?.error) {
-            setError({ message: result.message, hint: result.hint });
-          } else {
-            setData(result);
-          }
-        })
-        .catch((err) => setError({ message: err?.message || 'Failed to load health data', hint: err?.hint || '' }))
-        .finally(() => setLoading(false));
+      fetchHealth(repoPath);
     }
-  }, [repoPath, stats]);
+  }, [repoPath, stats, fetchHealth]);
 
   if (!repoPath || !stats) return <NotAnalyzed />;
-  if (loading) return <LoadingSkeleton variant="cards" />;
+  if (loading && !data) return <LoadingSkeleton variant="cards" />;
   if (error) return (
     <div className="p-6">
-      <ErrorMessage message={error.message} hint={error.hint} onRetry={() => {
-        setError(null);
-        setLoading(true);
-        getHealth(repoPath)
-          .then((result) => {
-            if (result?.error) setError({ message: result.message, hint: result.hint });
-            else setData(result);
-          })
-          .catch((err) => setError({ message: err?.message || 'Failed', hint: '' }))
-          .finally(() => setLoading(false));
-      }} />
+      <ErrorMessage message={error.message} hint={error.hint} onRetry={() => fetchHealth(repoPath)} />
     </div>
   );
   if (!data) return null;

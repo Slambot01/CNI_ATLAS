@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAnalysisContext } from '../client-layout';
-import { getOnboard } from '../../lib/api';
 import { useOnboardChat } from '../../hooks/useOnboardChat';
 import { Send, MessageSquare, Trash2, MessageSquarePlus, History, ChevronDown } from 'lucide-react';
 import NotAnalyzed from '../../components/NotAnalyzed';
@@ -10,12 +9,13 @@ import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 
 export default function OnboardPage() {
-  const { repoPath, stats } = useAnalysisContext();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const {
+    repoPath, stats,
+    onboardData: data, onboardLoading: loading, onboardError: error,
+    fetchOnboard, setOnboardError, setOnboardLoading,
+  } = useAnalysisContext();
 
-  // Follow-up chat with session tracking
+  // Follow-up chat from global context
   const {
     messages,
     streaming,
@@ -30,27 +30,17 @@ export default function OnboardPage() {
     startNewSession,
     loadSession,
     removeSession,
-  } = useOnboardChat(repoPath);
+  } = useOnboardChat();
   const [chatInput, setChatInput] = useState('');
   const messagesEndRef = useRef(null);
   const sessionsRef = useRef(null);
 
+  // Fetch onboard data on mount (cached — returns instantly if already loaded)
   useEffect(() => {
     if (repoPath && stats) {
-      setLoading(true);
-      setError(null);
-      getOnboard(repoPath)
-        .then((result) => {
-          if (result?.error) {
-            setError({ message: result.message, hint: result.hint });
-          } else {
-            setData(result);
-          }
-        })
-        .catch((err) => setError({ message: err?.message || 'Failed to generate report', hint: err?.hint || '' }))
-        .finally(() => setLoading(false));
+      fetchOnboard(repoPath);
     }
-  }, [repoPath, stats]);
+  }, [repoPath, stats, fetchOnboard]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -101,15 +91,8 @@ export default function OnboardPage() {
   if (error) return (
     <div className="p-6">
       <ErrorMessage message={error.message} hint={error.hint} onRetry={() => {
-        setError(null);
-        setLoading(true);
-        getOnboard(repoPath)
-          .then((result) => {
-            if (result?.error) setError({ message: result.message, hint: result.hint });
-            else setData(result);
-          })
-          .catch((err) => setError({ message: err?.message || 'Failed', hint: '' }))
-          .finally(() => setLoading(false));
+        setOnboardError(null);
+        fetchOnboard(repoPath);
       }} />
     </div>
   );
@@ -215,7 +198,6 @@ export default function OnboardPage() {
           </div>
 
           <div className="flex items-center gap-2 relative" ref={sessionsRef}>
-            {/* New Chat button */}
             <button onClick={startNewSession}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-all duration-200"
               style={{
@@ -235,7 +217,6 @@ export default function OnboardPage() {
               <MessageSquarePlus size={11} /> New
             </button>
 
-            {/* Sessions dropdown trigger */}
             {sessions.length > 0 && (
               <button
                 onClick={() => setSessionsOpen(!sessionsOpen)}
@@ -256,7 +237,6 @@ export default function OnboardPage() {
               </button>
             )}
 
-            {/* Clear current chat */}
             {messages.length > 0 && (
               <button onClick={clearChat}
                 className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-all duration-200"

@@ -1,198 +1,27 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { createAskSocket, getChatHistory, getChatSessions, createNewSession, deleteSession } from '../lib/api';
+import { useAppContext } from '../context/AppContext';
 
 /**
- * Manages chat messages, WebSocket streaming, session tracking,
- * and persistent history via the SQLite backend.
- *
- * @param {string} repoPath – the current repo being analyzed
+ * Thin wrapper around AppContext for chat state.
+ * Messages now persist across page navigation.
  */
-export function useChat(repoPath) {
-  const [messages, setMessages] = useState([]);
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState(null);
-  const [ollamaDown, setOllamaDown] = useState(false);
-  const [sessionId, setSessionId] = useState('');
-  const [sessions, setSessions] = useState([]);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  const wsRef = useRef(null);
-
-  // Load sessions list + latest session messages on mount / repo change
-  useEffect(() => {
-    if (!repoPath) return;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const [histRes, sessRes] = await Promise.all([
-          getChatHistory(repoPath, 'chat'),
-          getChatSessions(repoPath, 'chat'),
-        ]);
-
-        if (cancelled) return;
-
-        if (!histRes?.error && histRes?.messages?.length) {
-          setMessages(histRes.messages.map((m) => ({ role: m.role, content: m.content })));
-          setSessionId(histRes.session_id || '');
-        }
-
-        if (!sessRes?.error && sessRes?.sessions) {
-          setSessions(sessRes.sessions);
-        }
-      } catch {
-        // non-critical
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [repoPath]);
-
-  // Refresh sessions list
-  const refreshSessions = useCallback(async () => {
-    if (!repoPath) return;
-    try {
-      const res = await getChatSessions(repoPath, 'chat');
-      if (!res?.error && res?.sessions) setSessions(res.sessions);
-    } catch {
-      // ignore
-    }
-  }, [repoPath]);
-
-  const sendMessage = useCallback((question, path) => {
-    // Add user message
-    setMessages((prev) => [...prev, { role: 'user', content: question }]);
-
-    // Add placeholder for assistant
-    setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-    setStreaming(true);
-    setError(null);
-    setOllamaDown(false);
-
-    const ws = createAskSocket(
-      question,
-      path,
-      // onToken
-      (token) => {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last?.role === 'assistant') {
-            updated[updated.length - 1] = {
-              ...last,
-              content: last.content + token,
-            };
-          }
-          return updated;
-        });
-      },
-      // onDone — receives session_id from server
-      (sid) => {
-        setStreaming(false);
-        if (sid) setSessionId(sid);
-        // Refresh sessions list after a completed exchange
-        refreshSessions();
-      },
-      // onError
-      (errObj) => {
-        setStreaming(false);
-        if (errObj.message.toLowerCase().includes('ollama') || errObj.message.toLowerCase().includes('cannot connect')) {
-          setOllamaDown(true);
-        }
-        setError(errObj);
-        // Remove the empty assistant placeholder if no content was streamed
-        setMessages((prev) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last?.role === 'assistant' && !last.content) {
-            return updated.slice(0, -1);
-          }
-          return updated;
-        });
-      },
-      sessionId, // pass current session
-    );
-
-    wsRef.current = ws;
-  }, [sessionId, refreshSessions]);
-
-  // Start a new session
-  const startNewSession = useCallback(async () => {
-    if (wsRef.current) wsRef.current.close();
-    if (!repoPath) return;
-
-    try {
-      const res = await createNewSession(repoPath, 'chat');
-      if (res?.session_id) setSessionId(res.session_id);
-    } catch {
-      // ignore — will get a new id on next send
-    }
-    setMessages([]);
-    setStreaming(false);
-    setError(null);
-    setOllamaDown(false);
-    setSessionsOpen(false);
-  }, [repoPath]);
-
-  // Load a specific session
-  const loadSession = useCallback(async (sid) => {
-    if (!repoPath || !sid) return;
-    try {
-      const res = await getChatHistory(repoPath, 'chat', sid);
-      if (!res?.error && res?.messages) {
-        setMessages(res.messages.map((m) => ({ role: m.role, content: m.content })));
-        setSessionId(sid);
-      }
-    } catch {
-      // ignore
-    }
-    setSessionsOpen(false);
-    setStreaming(false);
-    setError(null);
-    setOllamaDown(false);
-  }, [repoPath]);
-
-  // Delete a session
-  const removeSession = useCallback(async (sid) => {
-    if (!repoPath || !sid) return;
-    try {
-      await deleteSession(repoPath, 'chat', sid);
-      // If we deleted the current session, clear messages
-      if (sid === sessionId) {
-        setMessages([]);
-        setSessionId('');
-      }
-      refreshSessions();
-    } catch {
-      // ignore
-    }
-  }, [repoPath, sessionId, refreshSessions]);
-
-  const clearChat = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-    setMessages([]);
-    setStreaming(false);
-    setError(null);
-    setOllamaDown(false);
-  }, []);
-
+export function useChat() {
+  const ctx = useAppContext();
   return {
-    messages,
-    streaming,
-    error,
-    ollamaDown,
-    sessionId,
-    sessions,
-    sessionsOpen,
-    setSessionsOpen,
-    sendMessage,
-    clearChat,
-    startNewSession,
-    loadSession,
-    removeSession,
-    refreshSessions,
+    messages: ctx.chatMessages,
+    streaming: ctx.chatStreaming,
+    error: ctx.chatError,
+    ollamaDown: ctx.chatOllamaDown,
+    sessionId: ctx.chatSessionId,
+    sessions: ctx.chatSessions,
+    sessionsOpen: ctx.chatSessionsOpen,
+    setSessionsOpen: ctx.setChatSessionsOpen,
+    sendMessage: ctx.sendChatMessage,
+    clearChat: ctx.clearChat,
+    startNewSession: ctx.startNewChatSession,
+    loadSession: ctx.loadChatSession,
+    removeSession: ctx.removeChatSession,
+    refreshSessions: ctx.refreshChatSessions,
   };
 }
