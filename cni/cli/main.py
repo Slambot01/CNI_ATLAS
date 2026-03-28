@@ -967,6 +967,77 @@ def doctor() -> None:
         )
 
 
+@app.command()
+def serve(
+    path: Path = typer.Argument(
+        ".",
+        help="Repository path to analyze.",
+        exists=True,
+        dir_okay=True,
+        file_okay=False,
+        resolve_path=True,
+    ),
+    port: int = typer.Option(
+        8000,
+        "--port", "-p",
+        help="Port to run the web UI on.",
+    ),
+    no_browser: bool = typer.Option(
+        False,
+        "--no-browser",
+        help="Don't open browser automatically.",
+    ),
+) -> None:
+    """Launch the CNI web UI for interactive codebase exploration.
+
+    Opens a browser at localhost:3000 with an interactive dependency graph,
+    chat interface, health dashboard, and more.  Everything runs locally —
+    no cloud, no data leaves your machine.
+
+    In development run the Next.js dev server in a separate terminal::
+
+        cd cni/server/frontend && npm run dev
+
+    Example::
+
+        cni serve .
+        cni serve /path/to/repo --port 9000
+        cni serve . --no-browser
+    """
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from cni.server.app import app as fastapi_app
+
+    api_url = f"http://localhost:{port}"
+    ui_url = "http://localhost:3000"
+
+    success(f"Starting CNI API at {api_url}")
+    success(f"Web UI running at {ui_url}")
+    success("Everything runs locally — no cloud")
+    warning(
+        "Make sure Next.js is running: "
+        "cd cni/server/frontend && npm run dev"
+    )
+
+    if not no_browser:
+        def _open_browser() -> None:
+            import time
+            time.sleep(2.0)
+            webbrowser.open(ui_url)
+
+        threading.Thread(target=_open_browser, daemon=True).start()
+
+    uvicorn.run(
+        fastapi_app,
+        host="0.0.0.0",
+        port=port,
+        log_level="warning",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------

@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ------------------------------------------------------------------ */
+/* Base layer                                                         */
+/* ------------------------------------------------------------------ */
+@layer base {
+  :root {
+    --cni-bg: #0a0a0f;
+    --cni-surface: #12121a;
+    --cni-border: #1e1e2e;
+  }
+
+  html {
+    @apply antialiased;
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-cni-bg text-cni-text font-sans;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-cni-bg;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-cni-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-cni-muted;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Components                                                         */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .glass-card {
+    @apply bg-cni-surface/80 backdrop-blur-xl border border-cni-border rounded-xl;
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.15),
+                0 0 60px rgba(99, 102, 241, 0.05);
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-cni-accent hover:bg-cni-accent-light
+           text-white font-medium rounded-lg
+           transition-all duration-200 ease-out
+           active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply px-3 py-2 text-cni-muted hover:text-cni-text
+           hover:bg-white/5 rounded-lg
+           transition-all duration-200;
+  }
+
+  .stat-card {
+    @apply glass-card p-4 rounded-xl flex flex-col gap-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5
+           text-xs font-semibold rounded-full;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-500/20 text-red-400 border border-red-500/30;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+  }
+
+  .badge-success {
+    @apply badge bg-green-500/20 text-green-400 border border-green-500/30;
+  }
+
+  .badge-info {
+    @apply badge bg-indigo-500/20 text-indigo-400 border border-indigo-500/30;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 bg-cni-bg border border-cni-border
+           rounded-lg text-cni-text placeholder:text-cni-muted
+           focus:outline-none focus:border-cni-accent focus:ring-1
+           focus:ring-cni-accent/50 transition-all duration-200;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Animations                                                         */
+/* ------------------------------------------------------------------ */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.typing-dots::after {
+  content: '...';
+  animation: typing 1.5s steps(4, end) infinite;
+}
+
+@keyframes typing {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}
+
+/* ReactFlow overrides */
+.react-flow__minimap {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  border: 1px solid var(--cni-border) !important;
+}
+
+.react-flow__controls {
+  border-radius: 8px !important;
+  border: 1px solid var(--cni-border) !important;
+  overflow: hidden !important;
+}
+
+.react-flow__controls-button {
+  background: var(--cni-surface) !important;
+  border-bottom-color: var(--cni-border) !important;
+  fill: #94a3b8 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #1a1a2e !important;
+}

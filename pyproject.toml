@@ -10,7 +10,11 @@ dependencies = [
     "matplotlib",
     "requests",
     "sentence-transformers",
-    "numpy"
+    "numpy",
+    "fastapi",
+    "uvicorn[standard]",
+    "websockets",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]
