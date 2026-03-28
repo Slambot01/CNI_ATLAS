@@ -161,7 +161,25 @@
 .animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
 .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 
-/* Force-graph canvas container */
-.force-graph-container canvas {
-  border-radius: 12px;
+/* Force-graph: ensure canvas fills its container */
+.force-graph-container,
+.force-graph-container > canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Override react-force-graph's internal wrapper div */
+.graph-canvas-wrap > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.graph-canvas-wrap > div > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.graph-canvas-wrap canvas {
+  display: block !important;
 }

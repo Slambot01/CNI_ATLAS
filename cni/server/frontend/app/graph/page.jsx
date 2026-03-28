@@ -35,6 +35,7 @@ export default function GraphPage() {
   const { graphData, loading, error, fetchGraph } = useGraph();
   const fgRef = useRef(null);
   const containerRef = useRef(null);
+  const graphWrapperRef = useRef(null);
 
   // Dimensions via ResizeObserver
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -69,21 +70,23 @@ export default function GraphPage() {
     if (repoPath && stats) fetchGraph(repoPath);
   }, [repoPath, stats, fetchGraph]);
 
-  // ResizeObserver for container dimensions
+  // ResizeObserver — observe the wrapper div that has layout dimensions
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const wrapper = graphWrapperRef.current;
+    if (!wrapper) return;
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
+    const measure = () => {
+      const rect = wrapper.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setDimensions({ width: Math.floor(rect.width), height: Math.floor(rect.height) });
       }
-    });
+    };
 
-    observer.observe(container);
+    // Initial measurement
+    measure();
+
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(wrapper);
     return () => observer.disconnect();
   }, []);
 
@@ -213,11 +216,14 @@ export default function GraphPage() {
     if (node && fgRef.current) handleSearchSelect(node);
   }, [filteredData.nodes, handleSearchSelect]);
 
-  // Auto-center on first engine stop
+  // Auto-center on first engine stop (with retry for safety)
   const handleEngineStop = useCallback(() => {
     if (!engineStopped) {
       setEngineStopped(true);
-      fgRef.current?.zoomToFit(400, 50);
+      // Delay to ensure canvas is rendered at full size
+      setTimeout(() => {
+        try { fgRef.current?.zoomToFit(400, 50); } catch (_) {}
+      }, 200);
     }
   }, [engineStopped]);
 
@@ -300,33 +306,42 @@ export default function GraphPage() {
   }, []);
 
   const handleFitView = useCallback(() => {
-    try { fgRef.current?.zoomToFit(400, 50); }
-    catch (e) { console.warn('Fit view failed:', e); }
+    try {
+      fgRef.current?.zoomToFit(400, 50);
+      setTimeout(() => {
+        try { fgRef.current?.zoomToFit(400, 50); } catch (_) {}
+      }, 100);
+    } catch (e) { console.warn('Fit view failed:', e); }
   }, []);
 
   const handleFullscreen = useCallback(() => {
-    if (!containerRef.current) return;
+    if (!graphWrapperRef.current) return;
     try {
       if (document.fullscreenElement) document.exitFullscreen();
-      else containerRef.current.requestFullscreen();
+      else graphWrapperRef.current.requestFullscreen();
     } catch (e) { console.warn('Fullscreen failed:', e); }
   }, []);
 
   const handleTogglePhysics = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    try {
-      if (physicsLocked) {
-        // Unlock: reheat the simulation
-        fg.d3ReheatSimulation();
-      } else {
-        // Lock: stop simulation immediately
+    if (physicsLocked) {
+      // Unlock: reheat simulation
+      try { fg.d3ReheatSimulation(); } catch (_) {}
+    } else {
+      // Lock: freeze all nodes in place
+      try {
         fg.cooldownTicks(0);
-        fg.d3Force('charge').strength(0);
-      }
-    } catch (e) { console.warn('Physics toggle failed:', e); }
+        // Fix all node positions to freeze them
+        filteredData.nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
+      } catch (_) {}
+    }
+    if (physicsLocked) {
+      // Unfreeze all nodes
+      filteredData.nodes.forEach(n => { n.fx = undefined; n.fy = undefined; });
+    }
     setPhysicsLocked(!physicsLocked);
-  }, [physicsLocked]);
+  }, [physicsLocked, filteredData.nodes]);
 
   const handleScreenshot = useCallback(() => {
     try {
@@ -413,8 +428,10 @@ export default function GraphPage() {
 
       {/* ══════ Graph + Side Panel ══════ */}
       <div className="flex flex-1 min-h-0">
-        {/* Canvas container — fills all remaining space */}
-        <div ref={containerRef} className="flex-1 min-h-0 relative overflow-hidden">
+        {/* Graph wrapper — flex child that gets layout size */}
+        <div ref={graphWrapperRef} className="flex-1 min-h-0 min-w-0 relative overflow-hidden" style={{ background: '#060a13' }}>
+          {/* Canvas container — absolutely fills the wrapper */}
+          <div ref={containerRef} className="graph-canvas-wrap" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center z-10" style={{ background: 'rgba(6, 10, 19, 0.85)' }}>
               <div className="text-center space-y-3">
@@ -559,6 +576,7 @@ export default function GraphPage() {
               </button>
             ))}
           </div>
+        </div>
         </div>
 
         {/* ══════ Side Panel ══════ */}
