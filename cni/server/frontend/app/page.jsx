@@ -7,29 +7,24 @@ export default function DashboardPage() {
 
   if (!stats && !loading) {
     return (
-      <div className="flex items-center justify-center min-h-[70vh]">
+      <div className="flex items-center justify-center min-h-[75vh]">
         <div className="text-center space-y-6 animate-fade-in">
-          <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-cni-accent to-purple-600 flex items-center justify-center text-white text-3xl font-bold shadow-2xl shadow-cni-accent/30">
+          <div className="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center text-white text-3xl font-bold"
+            style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', boxShadow: '0 8px 32px rgba(59, 130, 246, 0.3)' }}>
             C
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-cni-text mb-2">
-              Welcome to CNI
-            </h1>
-            <p className="text-cni-muted text-sm max-w-md mx-auto">
-              Enter a repository path above and click <span className="text-cni-accent font-medium">Analyze</span> to
-              explore your codebase with interactive dependency graphs, LLM chat, and health dashboards.
+            <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--cni-text)' }}>Welcome to CNI</h1>
+            <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--cni-muted)' }}>
+              Enter a repository path above and click <span className="font-medium" style={{ color: '#60a5fa' }}>Analyze</span> to explore your codebase with interactive dependency graphs, LLM chat, and health dashboards.
             </p>
           </div>
-          <div className="flex items-center justify-center gap-3 text-xs text-cni-muted">
+          <div className="flex items-center justify-center gap-3 text-xs" style={{ color: 'var(--cni-muted)' }}>
             <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
               100% Local
             </span>
-            <span>·</span>
-            <span>No Cloud</span>
-            <span>·</span>
-            <span>No Data Leaves Your Machine</span>
+            <span>·</span><span>No Cloud</span><span>·</span><span>No Data Leaves Your Machine</span>
           </div>
         </div>
       </div>
@@ -38,32 +33,32 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[70vh]">
+      <div className="flex items-center justify-center min-h-[75vh]">
         <div className="text-center space-y-4 animate-fade-in">
-          <div className="w-10 h-10 mx-auto border-3 border-cni-border border-t-cni-accent rounded-full animate-spin" />
-          <p className="text-sm text-cni-muted">Scanning repository…</p>
+          <div className="w-10 h-10 mx-auto border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
+          <p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Scanning repository…</p>
         </div>
       </div>
     );
   }
 
   const cards = [
-    { label: 'Files Indexed', value: stats.files, color: 'from-indigo-500/20 to-indigo-600/5', textColor: 'text-indigo-400' },
-    { label: 'Dependencies', value: stats.dependencies, color: 'from-cyan-500/20 to-cyan-600/5', textColor: 'text-cyan-400' },
-    { label: 'Isolated Files', value: stats.isolated, color: 'from-amber-500/20 to-amber-600/5', textColor: 'text-amber-400' },
-    { label: 'Most Imported', value: stats.most_imported, color: 'from-rose-500/20 to-rose-600/5', textColor: 'text-rose-400' },
+    { label: 'Files Indexed', value: stats.files, gradient: 'linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0.03) 100%)', color: '#60a5fa' },
+    { label: 'Dependencies', value: stats.dependencies, gradient: 'linear-gradient(135deg, rgba(34,211,238,0.15) 0%, rgba(34,211,238,0.03) 100%)', color: '#22d3ee' },
+    { label: 'Isolated Files', value: stats.isolated, gradient: 'linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(251,191,36,0.02) 100%)', color: '#fbbf24' },
+    { label: 'Most Imported', value: stats.most_imported, gradient: 'linear-gradient(135deg, rgba(248,113,113,0.12) 0%, rgba(248,113,113,0.02) 100%)', color: '#f87171' },
   ];
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4">
-        {cards.map(({ label, value, color, textColor }) => (
-          <div key={label} className="glass-card p-5 glow-accent animate-slide-up">
-            <div className={`absolute inset-0 rounded-xl bg-gradient-to-br ${color} pointer-events-none`} />
+        {cards.map(({ label, value, gradient, color }, i) => (
+          <div key={label} className="glass-card p-5 relative overflow-hidden animate-slide-up" style={{ animationDelay: `${i * 60}ms` }}>
+            <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{ background: gradient }} />
             <div className="relative">
-              <p className="text-xs text-cni-muted mb-1">{label}</p>
-              <p className={`text-3xl font-bold ${textColor}`}>{value.toLocaleString()}</p>
+              <p className="text-xs mb-1" style={{ color: 'var(--cni-muted)' }}>{label}</p>
+              <p className="text-3xl font-bold" style={{ color }}>{value.toLocaleString()}</p>
             </div>
           </div>
         ))}
@@ -72,23 +67,20 @@ export default function DashboardPage() {
       {/* Health overview */}
       {healthData && (
         <div className="glass-card p-6 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, transparent 60%)' }} />
           <div className="relative flex items-center justify-between">
             <div>
-              <p className="text-xs text-cni-muted mb-1">Codebase Health Score</p>
-              <p className={`text-5xl font-bold ${
-                healthData.score > 80 ? 'text-green-400' :
-                healthData.score > 50 ? 'text-yellow-400' : 'text-red-400'
-              }`}>
+              <p className="text-xs mb-1" style={{ color: 'var(--cni-muted)' }}>Codebase Health Score</p>
+              <p className="text-5xl font-bold" style={{ color: healthData.score > 80 ? '#4ade80' : healthData.score > 50 ? '#fbbf24' : '#f87171' }}>
                 {healthData.score}
-                <span className="text-lg text-cni-muted font-normal ml-1">/ 100</span>
+                <span className="text-lg font-normal ml-1" style={{ color: 'var(--cni-muted)' }}>/ 100</span>
               </p>
             </div>
             <div className="text-right space-y-1">
-              <p className="text-xs text-cni-muted">
+              <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>
                 {healthData.total_modules} modules · {healthData.god_modules?.length || 0} god modules
               </p>
-              <p className="text-xs text-cni-muted">
+              <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>
                 {healthData.coupled_modules?.length || 0} coupled · {healthData.isolated_count} isolated
               </p>
             </div>
@@ -99,18 +91,18 @@ export default function DashboardPage() {
       {/* Quick links */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { href: '/graph', label: 'Dependency Graph', desc: 'Interactive ReactFlow visualization', icon: '◎' },
+          { href: '/graph', label: 'Dependency Graph', desc: 'Interactive force-directed visualization', icon: '◎' },
           { href: '/chat', label: 'Ask CNI', desc: 'Query your codebase with LLM', icon: '◈' },
           { href: '/health', label: 'Health Report', desc: 'God modules, coupling analysis', icon: '♥' },
         ].map(({ href, label, desc, icon }) => (
-          <a
-            key={href}
-            href={href}
-            className="glass-card p-5 hover:border-cni-accent/30 hover:shadow-lg hover:shadow-cni-accent/5 transition-all duration-300 group"
-          >
-            <span className="text-2xl mb-3 block text-cni-muted group-hover:text-cni-accent transition-colors">{icon}</span>
-            <h3 className="text-sm font-semibold text-cni-text mb-1">{label}</h3>
-            <p className="text-xs text-cni-muted">{desc}</p>
+          <a key={href} href={href}
+            className="glass-card p-5 transition-all duration-300 group"
+            style={{ ':hover': { borderColor: 'rgba(59, 130, 246, 0.3)' } }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.08)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.boxShadow = 'none'; }}>
+            <span className="text-2xl mb-3 block transition-colors" style={{ color: 'var(--cni-muted)' }}>{icon}</span>
+            <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--cni-text)' }}>{label}</h3>
+            <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>{desc}</p>
           </a>
         ))}
       </div>

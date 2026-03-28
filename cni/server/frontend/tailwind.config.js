@@ -13,32 +13,20 @@ module.exports = {
       },
       colors: {
         cni: {
-          bg: '#0a0a0f',
-          surface: '#12121a',
-          border: '#1e1e2e',
-          accent: '#6366f1',
-          'accent-light': '#818cf8',
+          bg: '#060a13',
+          surface: '#0c1220',
+          'surface-2': '#111827',
+          border: '#1a2235',
+          'border-light': '#243044',
+          accent: '#3b82f6',
+          'accent-cyan': '#22d3ee',
           text: '#e2e8f0',
           muted: '#64748b',
-          success: '#22c55e',
-          warning: '#eab308',
-          danger: '#ef4444',
         },
       },
-      animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'fade-in': 'fadeIn 0.3s ease-out',
-        'slide-up': 'slideUp 0.3s ease-out',
-      },
-      keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(10px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
+      borderRadius: {
+        xl: '12px',
+        '2xl': '16px',
       },
     },
   },

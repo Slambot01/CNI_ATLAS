@@ -14,7 +14,11 @@ from pathlib import Path
 from cni.utils.errors import warning
 
 # Directories to skip during recursive scanning
-_IGNORE_DIRS: set[str] = {".git", "node_modules", "__pycache__", ".cni"}
+_IGNORE_DIRS: set[str] = {
+    ".git", "node_modules", "__pycache__", ".cni",
+    ".next", "dist", "build", "out", ".turbo", "coverage",
+    ".venv", "venv", "env", ".tox",
+}
 
 # Maximum file size to process (1 MB)
 _MAX_FILE_BYTES: int = 1_048_576

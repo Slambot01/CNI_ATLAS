@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
-  { href: '/',        label: 'Dashboard', icon: '◆' },
+  { href: '/',        label: 'Dashboard', icon: '⬡' },
   { href: '/graph',   label: 'Graph',     icon: '◎' },
   { href: '/chat',    label: 'Chat',      icon: '◈' },
   { href: '/health',  label: 'Health',    icon: '♥' },
@@ -16,52 +16,46 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-56 bg-cni-surface border-r border-cni-border flex flex-col z-40">
+    <aside className="fixed left-0 top-0 h-screen w-16 flex flex-col items-center py-4 z-50"
+      style={{ background: 'var(--cni-sidebar-bg)', borderRight: '1px solid var(--cni-border)' }}>
+
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-cni-border">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cni-accent to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-cni-accent/20 group-hover:shadow-cni-accent/40 transition-shadow">
-            C
-          </div>
-          <div>
-            <div className="text-sm font-bold tracking-wide text-cni-text">CNI</div>
-            <div className="text-[10px] text-cni-muted leading-none">Neural Interface</div>
-          </div>
-        </Link>
-      </div>
+      <Link href="/" className="mb-6 group">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm transition-all duration-300 group-hover:shadow-lg"
+          style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', boxShadow: '0 2px 12px rgba(59, 130, 246, 0.3)' }}>
+          C
+        </div>
+      </Link>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+      <nav className="flex-1 flex flex-col items-center gap-1">
         {NAV_ITEMS.map(({ href, label, icon }) => {
           const isActive = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                transition-all duration-200 group
-                ${isActive
-                  ? 'bg-cni-accent/15 text-cni-accent-light border border-cni-accent/20'
-                  : 'text-cni-muted hover:text-cni-text hover:bg-white/5 border border-transparent'
-                }
-              `}
+              title={label}
+              className="relative w-10 h-10 rounded-xl flex items-center justify-center text-base transition-all duration-200 group"
+              style={{
+                background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                color: isActive ? '#60a5fa' : 'var(--cni-muted)',
+                border: isActive ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid transparent',
+              }}
             >
-              <span className={`text-base ${isActive ? 'text-cni-accent' : 'text-cni-muted group-hover:text-cni-text'} transition-colors`}>
-                {icon}
+              <span className="group-hover:scale-110 transition-transform duration-200">{icon}</span>
+              {/* Tooltip */}
+              <span className="absolute left-full ml-3 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200"
+                style={{ background: 'var(--cni-surface-2)', border: '1px solid var(--cni-border)', color: 'var(--cni-text)' }}>
+                {label}
               </span>
-              {label}
             </Link>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-cni-border">
-        <p className="text-[10px] text-cni-muted text-center">
-          100% Local · No Cloud
-        </p>
-      </div>
+      {/* Footer dot */}
+      <div className="w-2 h-2 rounded-full" style={{ background: '#22c55e', boxShadow: '0 0 6px rgba(34, 197, 94, 0.5)' }} title="Local" />
     </aside>
   );
 }

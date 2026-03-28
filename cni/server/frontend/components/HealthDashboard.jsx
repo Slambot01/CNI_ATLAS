@@ -1,2 +1,2 @@
 'use client';
-export { default } from '../../app/health/page';
+export { default } from '../app/health/page';
