@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAnalysisContext } from '../client-layout';
 import { getImpact } from '../../lib/api';
+import NotAnalyzed from '../../components/NotAnalyzed';
+import ErrorMessage from '../../components/ErrorMessage';
 
 export default function ImpactPage() {
   const { repoPath, stats } = useAnalysisContext();
@@ -21,13 +23,19 @@ export default function ImpactPage() {
 
   const handleAnalyze = async () => {
     if (!file.trim() || !repoPath) return;
-    setLoading(true); setError(null);
-    try { const result = await getImpact(file.trim(), repoPath); setData(result); }
-    catch (err) { setError(err?.response?.data?.detail || err.message); setData(null); }
-    finally { setLoading(false); }
+    setLoading(true);
+    setError(null);
+    const result = await getImpact(file.trim(), repoPath);
+    if (result?.error) {
+      setError({ message: result.message, hint: result.hint });
+      setData(null);
+    } else {
+      setData(result);
+    }
+    setLoading(false);
   };
 
-  if (!repoPath || !stats) return <div className="flex items-center justify-center min-h-[75vh]"><p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Analyze a repository first to run impact analysis.</p></div>;
+  if (!repoPath || !stats) return <NotAnalyzed />;
 
   const riskStyles = { HIGH: 'badge-danger', MEDIUM: 'badge-warning', LOW: 'badge-success' };
 
@@ -45,7 +53,9 @@ export default function ImpactPage() {
         </div>
       </div>
 
-      {error && <div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>{error}</div>}
+      {error && (
+        <ErrorMessage message={error.message} hint={error.hint} onRetry={handleAnalyze} />
+      )}
 
       {data && (
         <div className="space-y-4 animate-slide-up">

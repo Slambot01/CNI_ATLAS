@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { createAskSocket, getChatHistory, getChatSessions, createNewSession, deleteSession } from '../lib/api';
+import { createOnboardChatSocket, getChatHistory, getChatSessions, createNewSession, deleteSession } from '../lib/api';
 
 /**
- * Manages chat messages, WebSocket streaming, session tracking,
- * and persistent history via the SQLite backend.
+ * Manages onboard follow-up chat messages with persistent session history.
+ * Uses /ws/onboard/chat which includes architecture context in every LLM prompt.
  *
  * @param {string} repoPath – the current repo being analyzed
  */
-export function useChat(repoPath) {
+export function useOnboardChat(repoPath) {
   const [messages, setMessages] = useState([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
@@ -27,8 +27,8 @@ export function useChat(repoPath) {
     (async () => {
       try {
         const [histRes, sessRes] = await Promise.all([
-          getChatHistory(repoPath, 'chat'),
-          getChatSessions(repoPath, 'chat'),
+          getChatHistory(repoPath, 'onboard'),
+          getChatSessions(repoPath, 'onboard'),
         ]);
 
         if (cancelled) return;
@@ -53,7 +53,7 @@ export function useChat(repoPath) {
   const refreshSessions = useCallback(async () => {
     if (!repoPath) return;
     try {
-      const res = await getChatSessions(repoPath, 'chat');
+      const res = await getChatSessions(repoPath, 'onboard');
       if (!res?.error && res?.sessions) setSessions(res.sessions);
     } catch {
       // ignore
@@ -70,7 +70,7 @@ export function useChat(repoPath) {
     setError(null);
     setOllamaDown(false);
 
-    const ws = createAskSocket(
+    const ws = createOnboardChatSocket(
       question,
       path,
       // onToken
@@ -91,7 +91,6 @@ export function useChat(repoPath) {
       (sid) => {
         setStreaming(false);
         if (sid) setSessionId(sid);
-        // Refresh sessions list after a completed exchange
         refreshSessions();
       },
       // onError
@@ -111,7 +110,7 @@ export function useChat(repoPath) {
           return updated;
         });
       },
-      sessionId, // pass current session
+      sessionId,
     );
 
     wsRef.current = ws;
@@ -123,10 +122,10 @@ export function useChat(repoPath) {
     if (!repoPath) return;
 
     try {
-      const res = await createNewSession(repoPath, 'chat');
+      const res = await createNewSession(repoPath, 'onboard');
       if (res?.session_id) setSessionId(res.session_id);
     } catch {
-      // ignore — will get a new id on next send
+      // ignore
     }
     setMessages([]);
     setStreaming(false);
@@ -139,7 +138,7 @@ export function useChat(repoPath) {
   const loadSession = useCallback(async (sid) => {
     if (!repoPath || !sid) return;
     try {
-      const res = await getChatHistory(repoPath, 'chat', sid);
+      const res = await getChatHistory(repoPath, 'onboard', sid);
       if (!res?.error && res?.messages) {
         setMessages(res.messages.map((m) => ({ role: m.role, content: m.content })));
         setSessionId(sid);
@@ -157,8 +156,7 @@ export function useChat(repoPath) {
   const removeSession = useCallback(async (sid) => {
     if (!repoPath || !sid) return;
     try {
-      await deleteSession(repoPath, 'chat', sid);
-      // If we deleted the current session, clear messages
+      await deleteSession(repoPath, 'onboard', sid);
       if (sid === sessionId) {
         setMessages([]);
         setSessionId('');

@@ -1,17 +1,17 @@
 """
 cni/server/routes/graph.py
 
-GET /api/graph — Return the dependency graph as nodes + edges for ReactFlow.
+GET /api/graph — Return the dependency graph as nodes + edges JSON.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 
-from cni.analyzer.repo_scanner import scan_repository
-from cni.graph.graph_builder import build_dependency_graph
+from cni.server.state import repo_state, RepoStateError
 
 router = APIRouter(tags=["graph"])
 
@@ -27,26 +27,21 @@ def _color_by_indegree(indegree: int) -> str:
 
 @router.get("/graph")
 async def get_graph(path: str = Query(..., description="Repository root path")) -> dict:
-    """Build the dependency graph and return nodes + edges as JSON."""
-    repo_path = Path(path).resolve()
+    """Return the cached dependency graph as nodes + edges JSON.
 
-    if not repo_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
-
+    Uses the in-memory graph from ``repo_state`` instead of rescanning.
+    Returns 400 if no repo has been analyzed yet.
+    """
     try:
-        file_paths = scan_repository(str(repo_path))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Scan failed: {exc}") from exc
-
-    if not file_paths:
-        raise HTTPException(status_code=404, detail="No source files found.")
-
-    try:
-        graph = build_dependency_graph(file_paths)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Graph build failed: {exc}"
-        ) from exc
+        graph = repo_state.get_graph()
+    except RepoStateError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "No repo analyzed yet",
+                "hint": "Send POST /api/analyze first",
+            },
+        )
 
     nodes = []
     for node in graph.nodes:

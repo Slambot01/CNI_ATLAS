@@ -1,11 +1,12 @@
 'use client';
 
 import { useAnalysisContext } from './client-layout';
+import ErrorMessage from '../components/ErrorMessage';
 
 export default function DashboardPage() {
-  const { stats, healthData, loading } = useAnalysisContext();
+  const { stats, healthData, loading, error } = useAnalysisContext();
 
-  if (!stats && !loading) {
+  if (!stats && !loading && !error) {
     return (
       <div className="flex items-center justify-center min-h-[75vh]">
         <div className="text-center space-y-6 animate-fade-in">
@@ -31,12 +32,23 @@ export default function DashboardPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[75vh]">
+        <div className="w-full max-w-lg px-6">
+          <ErrorMessage message={error.message} hint={error.hint} />
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[75vh]">
         <div className="text-center space-y-4 animate-fade-in">
           <div className="w-10 h-10 mx-auto border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
-          <p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Scanning repository…</p>
+          <p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Analyzing repository…</p>
+          <p className="text-xs" style={{ color: 'var(--cni-border)' }}>Scanning files and building dependency graph</p>
         </div>
       </div>
     );
@@ -97,7 +109,6 @@ export default function DashboardPage() {
         ].map(({ href, label, desc, icon }) => (
           <a key={href} href={href}
             className="glass-card p-5 transition-all duration-300 group"
-            style={{ ':hover': { borderColor: 'rgba(59, 130, 246, 0.3)' } }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.08)'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.boxShadow = 'none'; }}>
             <span className="text-2xl mb-3 block transition-colors" style={{ color: 'var(--cni-muted)' }}>{icon}</span>

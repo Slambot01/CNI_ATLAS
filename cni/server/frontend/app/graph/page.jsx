@@ -5,6 +5,9 @@ import { useGraph } from '../../hooks/useGraph';
 import { useAnalysisContext } from '../client-layout';
 import { explainFile } from '../../lib/api';
 import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera } from 'lucide-react';
+import NotAnalyzed from '../../components/NotAnalyzed';
+import ErrorMessage from '../../components/ErrorMessage';
+import LoadingSkeleton from '../../components/LoadingSkeleton';
 
 // Manual dynamic import that preserves ref forwarding
 function useForceGraph() {
@@ -39,7 +42,7 @@ const PANEL_W = 320;
 export default function GraphPage() {
   const ForceGraph2D = useForceGraph();
   const { repoPath, stats } = useAnalysisContext();
-  const { graphData, loading, error, fetchGraph } = useGraph();
+  const { graphData, loading, error, notAnalyzed, fetchGraph } = useGraph();
   const fgRef = useRef(null);
 
   // ── Dimensions: simple window-based calc ──
@@ -347,12 +350,24 @@ export default function GraphPage() {
   }, []);
 
   // ── Not analyzed state ──
-  if (!repoPath || !stats) {
+  if (!repoPath || !stats || notAnalyzed) {
+    return <NotAnalyzed />;
+  }
+
+  // ── Error state ──
+  if (error && !loading) {
     return (
       <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 5.75rem)' }}>
-        <p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Analyze a repository first to view the dependency graph.</p>
+        <div className="w-full max-w-lg px-6">
+          <ErrorMessage message={error.message || error} hint={error.hint} onRetry={() => fetchGraph(repoPath)} />
+        </div>
       </div>
     );
+  }
+
+  // ── Loading state ──
+  if (loading && graphData.nodes.length === 0) {
+    return <LoadingSkeleton variant="graph" message="Building dependency graph…" />;
   }
 
   return (

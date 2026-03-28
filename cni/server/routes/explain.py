@@ -6,13 +6,11 @@ GET /api/explain — Explain how a file participates in the dependency graph.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse
 
 from cni.analysis.explainer import explain_file
-from cni.analyzer.repo_scanner import scan_repository
-from cni.graph.graph_builder import build_dependency_graph
+from cni.server.state import repo_state, RepoStateError
 
 router = APIRouter(tags=["explain"])
 
@@ -22,26 +20,21 @@ async def get_explain(
     file: str = Query(..., description="File to explain (name or partial path)"),
     path: str = Query(..., description="Repository root path"),
 ) -> dict:
-    """Explain what a file imports and what imports it."""
-    repo_path = Path(path).resolve()
+    """Explain what a file imports and what imports it.
 
-    if not repo_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
-
+    Uses the cached graph from ``repo_state``.
+    Returns 400 if no repo has been analyzed yet.
+    """
     try:
-        file_paths = scan_repository(str(repo_path))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Scan failed: {exc}") from exc
-
-    if not file_paths:
-        raise HTTPException(status_code=404, detail="No source files found.")
-
-    try:
-        graph = build_dependency_graph(file_paths)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Graph build failed: {exc}"
-        ) from exc
+        graph = repo_state.get_graph()
+    except RepoStateError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "No repo analyzed yet",
+                "hint": "Send POST /api/analyze first",
+            },
+        )
 
     explanation = explain_file(graph, file)
     if explanation is None:

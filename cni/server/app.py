@@ -24,6 +24,7 @@ from cni.server.routes.impact import router as impact_router
 from cni.server.routes.onboard import router as onboard_router
 from cni.server.routes.ask import router as ask_router
 from cni.server.routes.explain import router as explain_router
+from cni.server.routes.chat_history import router as chat_history_router
 
 app = FastAPI(
     title="CNI API",
@@ -51,9 +52,10 @@ app.include_router(analyze_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(impact_router, prefix="/api")
-app.include_router(onboard_router, prefix="/api")
+app.include_router(onboard_router)     # mounts /api/onboard, /api/onboard/chat, /ws/onboard/chat
 app.include_router(ask_router)          # mounts /api/ask and /ws/ask
 app.include_router(explain_router, prefix="/api")
+app.include_router(chat_history_router) # mounts /api/chat/history, sessions, new-session, session
 
 # ---------------------------------------------------------------------------
 # Static file serving (production: Next.js export)

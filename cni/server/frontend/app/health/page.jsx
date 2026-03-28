@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useAnalysisContext } from '../client-layout';
 import { getHealth } from '../../lib/api';
+import NotAnalyzed from '../../components/NotAnalyzed';
+import ErrorMessage from '../../components/ErrorMessage';
+import LoadingSkeleton from '../../components/LoadingSkeleton';
 
 export default function HealthPage() {
   const { repoPath, stats } = useAnalysisContext();
@@ -13,13 +16,37 @@ export default function HealthPage() {
   useEffect(() => {
     if (repoPath && stats) {
       setLoading(true);
-      getHealth(repoPath).then(setData).catch((err) => setError(err?.response?.data?.detail || err.message)).finally(() => setLoading(false));
+      setError(null);
+      getHealth(repoPath)
+        .then((result) => {
+          if (result?.error) {
+            setError({ message: result.message, hint: result.hint });
+          } else {
+            setData(result);
+          }
+        })
+        .catch((err) => setError({ message: err?.message || 'Failed to load health data', hint: err?.hint || '' }))
+        .finally(() => setLoading(false));
     }
   }, [repoPath, stats]);
 
-  if (!repoPath || !stats) return <div className="flex items-center justify-center min-h-[75vh]"><p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Analyze a repository first to view health metrics.</p></div>;
-  if (loading) return <div className="flex items-center justify-center min-h-[75vh]"><div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} /></div>;
-  if (error) return <div className="p-6"><div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>{error}</div></div>;
+  if (!repoPath || !stats) return <NotAnalyzed />;
+  if (loading) return <LoadingSkeleton variant="cards" />;
+  if (error) return (
+    <div className="p-6">
+      <ErrorMessage message={error.message} hint={error.hint} onRetry={() => {
+        setError(null);
+        setLoading(true);
+        getHealth(repoPath)
+          .then((result) => {
+            if (result?.error) setError({ message: result.message, hint: result.hint });
+            else setData(result);
+          })
+          .catch((err) => setError({ message: err?.message || 'Failed', hint: '' }))
+          .finally(() => setLoading(false));
+      }} />
+    </div>
+  );
   if (!data) return null;
 
   const scoreColor = data.score > 80 ? '#4ade80' : data.score > 50 ? '#fbbf24' : '#f87171';

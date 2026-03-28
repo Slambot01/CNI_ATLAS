@@ -6,15 +6,13 @@ POST /api/impact — Analyze the blast radius of modifying a file.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from cni.analysis.explainer import _resolve_node
 from cni.analysis.impact import analyze_impact
-from cni.analyzer.repo_scanner import scan_repository
-from cni.graph.graph_builder import build_dependency_graph
+from cni.server.state import repo_state, RepoStateError
 
 router = APIRouter(tags=["impact"])
 
@@ -28,26 +26,22 @@ class ImpactRequest(BaseModel):
 
 @router.post("/impact")
 async def post_impact(body: ImpactRequest) -> dict:
-    """Analyze how modifying *file* impacts the rest of the codebase."""
-    repo_path = Path(body.path).resolve()
+    """Analyze how modifying *file* impacts the rest of the codebase.
 
-    if not repo_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Not a directory: {body.path}")
-
+    Uses the cached graph and file list from ``repo_state``.
+    Returns 400 if no repo has been analyzed yet.
+    """
     try:
-        file_paths = scan_repository(str(repo_path))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Scan failed: {exc}") from exc
-
-    if not file_paths:
-        raise HTTPException(status_code=404, detail="No source files found.")
-
-    try:
-        graph = build_dependency_graph(file_paths)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Graph build failed: {exc}"
-        ) from exc
+        graph = repo_state.get_graph()
+        file_paths = repo_state.get_file_paths()
+    except RepoStateError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "No repo analyzed yet",
+                "hint": "Send POST /api/analyze first",
+            },
+        )
 
     resolved = _resolve_node(graph, body.file)
     if resolved is None:

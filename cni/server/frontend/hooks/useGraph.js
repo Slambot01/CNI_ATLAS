@@ -6,17 +6,31 @@ import { getGraph } from '../lib/api';
 /**
  * Fetches graph data for react-force-graph.
  * Returns { nodes, links } format expected by ForceGraph2D.
+ * Detects 400 "not analyzed" responses from the backend.
  */
 export function useGraph() {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [notAnalyzed, setNotAnalyzed] = useState(false);
 
   const fetchGraph = useCallback(async (path) => {
     setLoading(true);
     setError(null);
+    setNotAnalyzed(false);
     try {
       const data = await getGraph(path);
+
+      // Check for error response (400 returned as JSON body)
+      if (data?.error) {
+        if (data.notAnalyzed) {
+          setNotAnalyzed(true);
+        } else {
+          setError({ message: data.message, hint: data.hint });
+        }
+        setLoading(false);
+        return;
+      }
 
       // Transform to react-force-graph format
       const nodes = data.nodes.map((n) => ({
@@ -25,7 +39,6 @@ export function useGraph() {
         indegree: n.indegree,
         outdegree: n.outdegree,
         color: n.color,
-        // Size scaled by in-degree: base 4, grows with imports
         val: Math.max(2, 2 + n.indegree * 1.5),
       }));
 
@@ -37,11 +50,14 @@ export function useGraph() {
 
       setGraphData({ nodes, links });
     } catch (err) {
-      setError(err?.response?.data?.detail || err.message);
+      setError({
+        message: err?.message || 'Failed to load graph',
+        hint: err?.hint || '',
+      });
     } finally {
       setLoading(false);
     }
   }, []);
 
-  return { graphData, loading, error, fetchGraph };
+  return { graphData, loading, error, notAnalyzed, fetchGraph };
 }

@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { analyzeRepo, getHealth } from '../lib/api';
 
 /**
- * Shared analysis state — repo path, stats, loading.
+ * Shared analysis state — repo path, stats, loading, error.
  * Used by the top bar, stats bar, and multiple pages.
  */
 export function useAnalysis() {
@@ -22,15 +22,18 @@ export function useAnalysis() {
       setStats(data);
       setRepoPath(path);
 
-      // Also fetch health in parallel
-      try {
-        const health = await getHealth(path);
-        setHealthData(health);
-      } catch {
-        // Health is optional
-      }
+      // Also fetch health in parallel (non-blocking)
+      getHealth(path)
+        .then((health) => {
+          if (!health?.error) setHealthData(health);
+        })
+        .catch(() => {});
     } catch (err) {
-      setError(err?.response?.data?.detail || err.message);
+      // err is now our structured { error, message, hint } from api.js
+      setError({
+        message: err?.message || 'Analysis failed',
+        hint: err?.hint || '',
+      });
     } finally {
       setLoading(false);
     }

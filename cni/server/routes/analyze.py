@@ -11,8 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from cni.analyzer.repo_scanner import scan_repository
-from cni.graph.graph_builder import build_dependency_graph, get_graph_stats
+from cni.server.state import repo_state
 
 router = APIRouter(tags=["analyze"])
 
@@ -34,29 +33,19 @@ class AnalyzeResponse(BaseModel):
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_repo(body: AnalyzeRequest) -> AnalyzeResponse:
-    """Scan *path*, build the dependency graph, and return summary stats."""
+    """Scan *path*, build the dependency graph, and return summary stats.
+
+    This is the ONLY route that triggers scanning.  All other routes
+    read from the in-memory cache populated here.
+    """
     repo_path = Path(body.path).resolve()
 
     if not repo_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Not a directory: {body.path}")
 
     try:
-        file_paths: list[str] = scan_repository(str(repo_path))
+        stats = repo_state.analyze(str(repo_path))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Scan failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}") from exc
 
-    if not file_paths:
-        raise HTTPException(
-            status_code=404,
-            detail="No supported source files found in the given path.",
-        )
-
-    try:
-        graph = build_dependency_graph(file_paths)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=f"Graph build failed: {exc}"
-        ) from exc
-
-    stats = get_graph_stats(graph)
     return AnalyzeResponse(**stats)
