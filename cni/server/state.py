@@ -49,6 +49,7 @@ class RepoState:
         self._graph: Optional[nx.DiGraph] = None
         self._stats: Optional[dict] = None
         self._onboard_report: Optional[dict] = None
+        self._semantic_index = None  # SemanticIndex from retrieval module
 
     # ------------------------------------------------------------------
     # Public API
@@ -166,6 +167,37 @@ class RepoState:
         """
         self._onboard_report = report
 
+    def get_semantic_index(self):
+        """Return the cached semantic index, building it if necessary.
+
+        Uses :func:`cni.retrieval.semantic_search.build_index` on the
+        first call, then caches the resulting :class:`SemanticIndex` in
+        memory for fast repeated queries.
+
+        Returns:
+            The module-level :class:`SemanticIndex` singleton.
+
+        Raises:
+            RepoStateError: If no repo has been analyzed yet.
+            RuntimeError:   If the index cannot be built.
+        """
+        if self._file_paths is None:
+            raise RepoStateError(
+                "No repo analyzed yet. Send POST /api/analyze first."
+            )
+
+        if self._semantic_index is not None:
+            return self._semantic_index
+
+        from cni.retrieval.semantic_search import build_index, _index as module_index
+
+        # Build the index (populates the module-level _index singleton)
+        build_index(self._file_paths)
+
+        from cni.retrieval import semantic_search
+        self._semantic_index = semantic_search._index
+        return self._semantic_index
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -188,6 +220,7 @@ class RepoState:
         self._graph = graph
         self._stats = get_graph_stats(graph)
         self._onboard_report = None  # invalidate on new repo
+        self._semantic_index = None  # invalidate on new repo
 
     def _persist_analysis(self, repo_path: str) -> None:
         """Save a snapshot of the current analysis to the history database.

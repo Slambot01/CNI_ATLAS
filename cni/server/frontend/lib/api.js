@@ -357,3 +357,30 @@ export async function getHistory(path, limit = 30) {
     return parseError(err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Semantic Search
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/search — Run a natural-language search over codebase files.
+ * @param {string} query — natural language query
+ * @param {string} path — repo path
+ * @param {number} [topN=10]
+ * @returns {Promise<{results: Array<{file: string, path: string, score: number}>}>}
+ */
+export async function semanticSearch(query, path, topN = 10) {
+  try {
+    const { data } = await API.post('/api/search', {
+      query,
+      path,
+      top_n: topN,
+    });
+    if (data?.error) {
+      return { error: true, message: data.error, hint: data.hint || '' };
+    }
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}

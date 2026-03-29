@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useGraph } from '../../hooks/useGraph';
 import { useAnalysisContext } from '../client-layout';
 import { useAppContext } from '../../context/AppContext';
-import { explainFile } from '../../lib/api';
-import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera } from 'lucide-react';
+import { explainFile, semanticSearch } from '../../lib/api';
+import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera, Search, Sparkles, X } from 'lucide-react';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
@@ -72,10 +72,16 @@ export default function GraphPage() {
   const [minConn, setMinConn] = useState(0);
   const [colorMode, setColorMode] = useState('folder');
 
-  // Search
+  // Search — file mode
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchHighlight, setSearchHighlight] = useState(null);
+
+  // Search — smart mode
+  const [searchMode, setSearchMode] = useState('file'); // 'file' | 'smart'
+  const [smartSearchResults, setSmartSearchResults] = useState(null); // [{file, path, score}]
+  const [smartSearchLoading, setSmartSearchLoading] = useState(false);
+  const [smartSearchQuery, setSmartSearchQuery] = useState('');
 
   // Interaction
   const [selectedNode, setSelectedNode] = useState(null);
@@ -92,6 +98,18 @@ export default function GraphPage() {
   const [hasAutoFit, setHasAutoFit] = useState(false);
 
   const panelOpen = !!selectedNode;
+
+  // Build a map of filename -> score from smart search results for fast lookup
+  const smartScoreMap = useMemo(() => {
+    if (!smartSearchResults) return null;
+    const map = new Map();
+    smartSearchResults.forEach(r => {
+      // Match by full path or just filename
+      map.set(r.path, r.score);
+      map.set(r.file, r.score);
+    });
+    return map;
+  }, [smartSearchResults]);
 
   // Resize listener
   useEffect(() => {
@@ -163,12 +181,67 @@ export default function GraphPage() {
     return { nodes, links };
   }, [graphData, hideTests, hideIsolated, hideInit, minConn]);
 
-  // Search
+  // File search (instant, local)
   useEffect(() => {
+    if (searchMode !== 'file') return;
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     const q = searchQuery.toLowerCase();
     setSearchResults(filteredData.nodes.filter(n => n.label.toLowerCase().includes(q)).slice(0, 8));
-  }, [searchQuery, filteredData.nodes]);
+  }, [searchQuery, filteredData.nodes, searchMode]);
+
+  // Smart search handler (on Enter or button click)
+  const handleSmartSearch = useCallback(async () => {
+    if (!searchQuery.trim() || !repoPath) return;
+    setSmartSearchLoading(true);
+    setSmartSearchQuery(searchQuery.trim());
+    try {
+      const res = await semanticSearch(searchQuery.trim(), repoPath, 10);
+      if (res?.results) {
+        setSmartSearchResults(res.results);
+        // Build a set of matching node IDs for highlighting
+        const matchSet = new Set();
+        res.results.forEach(r => {
+          const node = filteredData.nodes.find(n => n.id === r.path || n.label === r.file);
+          if (node) matchSet.add(node.id);
+        });
+        setHighlightNodes(matchSet);
+        setHighlightLinks(new Set());
+        setSelectedNode(null);
+        setNodeDetails(null);
+        setSearchHighlight(null);
+      }
+    } catch {
+      setSmartSearchResults([]);
+    } finally {
+      setSmartSearchLoading(false);
+    }
+  }, [searchQuery, repoPath, filteredData.nodes]);
+
+  const clearSmartSearch = useCallback(() => {
+    setSmartSearchResults(null);
+    setSmartSearchQuery('');
+    setSearchQuery('');
+    setHighlightNodes(new Set());
+    setHighlightLinks(new Set());
+  }, []);
+
+  const handleSearchKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' && searchMode === 'smart') {
+      e.preventDefault();
+      handleSmartSearch();
+    }
+  }, [searchMode, handleSmartSearch]);
+
+  const toggleSearchMode = useCallback(() => {
+    const next = searchMode === 'file' ? 'smart' : 'file';
+    setSearchMode(next);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSmartSearchResults(null);
+    setSmartSearchQuery('');
+    setHighlightNodes(new Set());
+    setHighlightLinks(new Set());
+  }, [searchMode]);
 
   const getNodeColor = useCallback((node) => {
     if (colorMode === 'folder') return folderColorMap[getFolderFromId(node.id)] || '#64748b';
@@ -197,7 +270,6 @@ export default function GraphPage() {
     setHighlightLinks(links);
     setSelectedNode(node);
     setSearchHighlight(null);
-    // Set the chat context to this node
     setSelectedChatFile(node);
     setDetailsLoading(true);
     try { const details = await explainFile(node.label, repoPath); setNodeDetails(details); }
@@ -212,7 +284,16 @@ export default function GraphPage() {
   const handleBgClick = useCallback(() => {
     setHighlightNodes(new Set()); setHighlightLinks(new Set());
     setSelectedNode(null); setNodeDetails(null); setSearchHighlight(null);
-  }, []);
+    // If smart search is active, restore its highlighting after clearing node selection
+    if (smartSearchResults && smartSearchResults.length > 0) {
+      const matchSet = new Set();
+      smartSearchResults.forEach(r => {
+        const node = filteredData.nodes.find(n => n.id === r.path || n.label === r.file);
+        if (node) matchSet.add(node.id);
+      });
+      setHighlightNodes(matchSet);
+    }
+  }, [smartSearchResults, filteredData.nodes]);
 
   const handleSearchSelect = useCallback((node) => {
     setSearchHighlight(node.id);
@@ -222,12 +303,24 @@ export default function GraphPage() {
     setHighlightNodes(nodes);
     setHighlightLinks(links);
     setSelectedNode(node);
-    // Set the chat context to this node
     setSelectedChatFile(node);
     if (fgRef.current) { fgRef.current.centerAt(node.x, node.y, 500); fgRef.current.zoom(3, 500); }
     setDetailsLoading(true);
     explainFile(node.label, repoPath).then(setNodeDetails).catch(() => setNodeDetails(null)).finally(() => setDetailsLoading(false));
   }, [repoPath, getNeighbors, setSelectedChatFile]);
+
+  const handleSmartResultClick = useCallback((result) => {
+    const node = filteredData.nodes.find(n => n.id === result.path || n.label === result.file);
+    if (node && fgRef.current) {
+      fgRef.current.centerAt(node.x, node.y, 500);
+      fgRef.current.zoom(3, 500);
+      // Also select the node for details
+      setSelectedNode(node);
+      setSelectedChatFile(node);
+      setDetailsLoading(true);
+      explainFile(node.label, repoPath).then(setNodeDetails).catch(() => setNodeDetails(null)).finally(() => setDetailsLoading(false));
+    }
+  }, [filteredData.nodes, repoPath, setSelectedChatFile]);
 
   const handleDetailNodeClick = useCallback((targetLabel) => {
     const node = filteredData.nodes.find(n => n.label === targetLabel || n.id.endsWith(targetLabel));
@@ -246,25 +339,53 @@ export default function GraphPage() {
 
   // ── Node painting ──
   const paintNode = useCallback((node, ctx, globalScale) => {
-    const isActive = highlightNodes.size === 0 || highlightNodes.has(node.id);
     const isSearched = searchHighlight === node.id;
     const isHovered = hoverNode?.id === node.id;
     const radius = Math.max(3, Math.min(14, 2 + (node.indegree || 0) * 0.9));
-    const alpha = isActive ? 1 : 0.1;
     const color = getNodeColor(node);
 
     const cr = parseInt(color.slice(1, 3), 16) || 100;
     const cg = parseInt(color.slice(3, 5), 16) || 150;
     const cb = parseInt(color.slice(5, 7), 16) || 250;
 
-    if (isActive || isSearched) {
-      const glowAlpha = isSearched ? 0.3 : isHovered ? 0.2 : 0.12;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius + (isSearched ? 8 : 4), 0, 2 * Math.PI);
-      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${glowAlpha})`;
-      ctx.fill();
+    // Determine alpha and glow based on smart search or node click highlighting
+    let alpha = 1;
+    let glowRadius = 0;
+    let glowAlpha = 0;
+
+    if (smartScoreMap && !selectedNode) {
+      // Smart search mode: highlight by score
+      const score = smartScoreMap.get(node.id) || smartScoreMap.get(node.label) || 0;
+      if (score > 0) {
+        alpha = score > 0.8 ? 1.0 : score > 0.5 ? 0.85 : 0.65;
+        glowRadius = score > 0.8 ? 10 : score > 0.5 ? 6 : 3;
+        glowAlpha = score > 0.8 ? 0.35 : score > 0.5 ? 0.2 : 0.1;
+      } else {
+        alpha = 0.08;
+      }
+    } else if (highlightNodes.size > 0) {
+      // Click-to-highlight mode
+      alpha = highlightNodes.has(node.id) ? 1 : 0.1;
     }
 
+    const isActive = alpha > 0.15;
+
+    // Glow ring
+    if ((isActive && glowRadius > 0) || isSearched) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius + (isSearched ? 8 : glowRadius || 4), 0, 2 * Math.PI);
+      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${isSearched ? 0.3 : glowAlpha || 0.12})`;
+      ctx.fill();
+    } else if (isActive && (highlightNodes.size === 0 || highlightNodes.has(node.id))) {
+      if (isHovered) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius + 4, 0, 2 * Math.PI);
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.2)`;
+        ctx.fill();
+      }
+    }
+
+    // Main circle
     ctx.beginPath();
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI);
     ctx.globalAlpha = alpha;
@@ -275,7 +396,7 @@ export default function GraphPage() {
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    const showLabel = isHovered || isSearched || node.indegree >= 3 || globalScale > 2;
+    const showLabel = isHovered || isSearched || node.indegree >= 3 || globalScale > 2 || (smartScoreMap && (smartScoreMap.get(node.id) || smartScoreMap.get(node.label)));
     if (showLabel && isActive) {
       const fs = Math.max(10 / globalScale, 2.5);
       ctx.font = `${fs}px 'JetBrains Mono', monospace`;
@@ -284,13 +405,25 @@ export default function GraphPage() {
       ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
       ctx.fillText(node.label, node.x, node.y + radius + 2);
     }
-  }, [highlightNodes, hoverNode, searchHighlight, getNodeColor]);
+  }, [highlightNodes, hoverNode, searchHighlight, getNodeColor, smartScoreMap, selectedNode]);
 
   // ── Edge color ──
   const getLinkColor = useCallback((link) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
     const key = `${s}→${t}`;
+
+    // In smart search mode with no node selected, dim all edges
+    if (smartScoreMap && !selectedNode) {
+      const sScore = smartScoreMap.get(s) || smartScoreMap.get(link.source?.label) || 0;
+      const tScore = smartScoreMap.get(t) || smartScoreMap.get(link.target?.label) || 0;
+      if (sScore > 0 && tScore > 0) {
+        if (circularPairs.has(key)) return 'rgba(251, 191, 36, 0.4)';
+        return 'rgba(96, 165, 250, 0.25)';
+      }
+      return 'rgba(30, 34, 53, 0.05)';
+    }
+
     if (highlightLinks.size > 0) {
       if (highlightLinks.has(link)) {
         if (circularPairs.has(key)) return 'rgba(251, 191, 36, 0.7)';
@@ -302,7 +435,7 @@ export default function GraphPage() {
     const targetNode = filteredData.nodes.find(n => n.id === t);
     if (targetNode && targetNode.indegree >= 10) return 'rgba(248, 113, 113, 0.15)';
     return 'rgba(71, 85, 105, 0.08)';
-  }, [highlightLinks, circularPairs, filteredData.nodes]);
+  }, [highlightLinks, circularPairs, filteredData.nodes, smartScoreMap, selectedNode]);
 
   // ── Control handlers ──
   const handleZoomIn = useCallback(() => {
@@ -340,10 +473,8 @@ export default function GraphPage() {
     const fg = fgRef.current;
     if (!fg) return;
     if (!physicsLocked) {
-      // Lock: fix all nodes
       filteredData.nodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
     } else {
-      // Unlock: release all nodes
       filteredData.nodes.forEach(n => { n.fx = undefined; n.fy = undefined; });
       try { fg.d3ReheatSimulation(); } catch (_) {}
     }
@@ -417,25 +548,135 @@ export default function GraphPage() {
           <option value="default">Color: Default</option>
         </select>
 
-        <div className="relative ml-auto">
-          <input type="text" placeholder="🔍 Search files..." value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-1 text-xs rounded-lg w-48" style={{ background: 'var(--cni-bg)', border: '1px solid var(--cni-border)', color: 'var(--cni-text)' }} />
-          {searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-50 max-h-48 overflow-y-auto"
-              style={{ background: 'var(--cni-surface)', border: '1px solid var(--cni-border)' }}>
-              {searchResults.map(n => (
-                <button key={n.id} onClick={() => handleSearchSelect(n)}
-                  className="w-full px-3 py-2 text-left text-xs font-mono flex items-center justify-between transition-colors"
-                  style={{ color: 'var(--cni-text)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.1)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <span>{n.label}</span>
-                  <span style={{ color: 'var(--cni-muted)' }}>in:{n.indegree}</span>
+        {/* ══════ Search area with mode toggle ══════ */}
+        <div className="relative ml-auto flex items-center gap-1.5">
+          {/* Mode toggle button */}
+          <button
+            onClick={toggleSearchMode}
+            title={searchMode === 'file' ? 'Switch to Smart Search' : 'Switch to File Search'}
+            className="w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200"
+            style={{
+              background: searchMode === 'smart' ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
+              border: `1px solid ${searchMode === 'smart' ? 'rgba(168, 85, 247, 0.3)' : 'var(--cni-border)'}`,
+              color: searchMode === 'smart' ? '#a855f7' : 'var(--cni-muted)',
+            }}
+          >
+            {searchMode === 'smart' ? <Sparkles size={14} /> : <Search size={14} />}
+          </button>
+
+          {/* Search input */}
+          <div className="relative">
+            <input
+              type="text"
+              placeholder={searchMode === 'file' ? 'Search files...' : "Ask anything... e.g. 'caching logic'"}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              className="pl-3 pr-8 py-1 text-xs rounded-lg transition-all duration-200"
+              style={{
+                width: searchMode === 'smart' ? 260 : 192,
+                background: 'var(--cni-bg)',
+                border: `1px solid ${searchMode === 'smart' ? 'rgba(168, 85, 247, 0.25)' : 'var(--cni-border)'}`,
+                color: 'var(--cni-text)',
+                boxShadow: searchMode === 'smart' ? '0 0 12px rgba(168, 85, 247, 0.06)' : 'none',
+              }}
+            />
+            {/* Right icon in input */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+              {smartSearchLoading ? (
+                <div className="w-3.5 h-3.5 border-2 rounded-full animate-spin"
+                  style={{ borderColor: 'var(--cni-border)', borderTopColor: '#a855f7' }} />
+              ) : searchQuery && searchMode === 'smart' ? (
+                <button onClick={handleSmartSearch} className="transition-colors" style={{ color: '#a855f7' }}>
+                  <Search size={13} />
                 </button>
-              ))}
+              ) : searchQuery ? (
+                <button onClick={() => { setSearchQuery(''); setSearchResults([]); clearSmartSearch(); }}
+                  style={{ color: 'var(--cni-muted)' }}>
+                  <X size={13} />
+                </button>
+              ) : null}
             </div>
-          )}
+
+            {/* File search autocomplete dropdown */}
+            {searchMode === 'file' && searchResults.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-50 max-h-48 overflow-y-auto"
+                style={{ background: 'var(--cni-surface)', border: '1px solid var(--cni-border)' }}>
+                {searchResults.map(n => (
+                  <button key={n.id} onClick={() => handleSearchSelect(n)}
+                    className="w-full px-3 py-2 text-left text-xs font-mono flex items-center justify-between transition-colors"
+                    style={{ color: 'var(--cni-text)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.1)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <span>{n.label}</span>
+                    <span style={{ color: 'var(--cni-muted)' }}>in:{n.indegree}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Smart search results panel */}
+            {searchMode === 'smart' && smartSearchResults && smartSearchResults.length > 0 && (
+              <div className="absolute top-full left-0 mt-1 rounded-xl overflow-hidden z-50 animate-fade-in"
+                style={{
+                  background: 'rgba(12, 18, 32, 0.95)',
+                  border: '1px solid rgba(168, 85, 247, 0.2)',
+                  backdropFilter: 'blur(16px)',
+                  minWidth: 280,
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                }}>
+                <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                  <Sparkles size={12} style={{ color: '#a855f7' }} />
+                  <span className="text-[11px] font-medium" style={{ color: 'var(--cni-text)' }}>
+                    {smartSearchResults.length} results for "{smartSearchQuery}"
+                  </span>
+                </div>
+                <div className="max-h-56 overflow-y-auto">
+                  {smartSearchResults.map((r, i) => (
+                    <button
+                      key={r.path || i}
+                      onClick={() => handleSmartResultClick(r)}
+                      className="w-full px-3 py-2 text-left flex items-center justify-between transition-colors"
+                      style={{ color: 'var(--cni-text)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(168, 85, 247, 0.08)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <span className="text-xs font-mono truncate mr-3">{r.file}</span>
+                      <span className="text-[10px] font-bold flex-shrink-0 px-1.5 py-0.5 rounded"
+                        style={{
+                          color: r.score > 0.8 ? '#a855f7' : r.score > 0.5 ? '#60a5fa' : 'var(--cni-muted)',
+                          background: r.score > 0.8 ? 'rgba(168, 85, 247, 0.12)' : r.score > 0.5 ? 'rgba(96, 165, 250, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                        }}>
+                        {Math.round(r.score * 100)}%
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className="px-3 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button onClick={clearSmartSearch}
+                    className="text-[11px] transition-colors"
+                    style={{ color: 'var(--cni-muted)' }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}>
+                    Clear Search
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Smart search — no results */}
+            {searchMode === 'smart' && smartSearchResults && smartSearchResults.length === 0 && !smartSearchLoading && (
+              <div className="absolute top-full left-0 mt-1 rounded-xl z-50 px-3 py-3 animate-fade-in"
+                style={{
+                  background: 'rgba(12, 18, 32, 0.95)',
+                  border: '1px solid var(--cni-border)',
+                  backdropFilter: 'blur(12px)',
+                  minWidth: 220,
+                }}>
+                <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>No results found</p>
+              </div>
+            )}
+          </div>
         </div>
 
         <span className="text-xs ml-3 flex-shrink-0" style={{ color: 'var(--cni-muted)' }}>
@@ -500,6 +741,29 @@ export default function GraphPage() {
             />
           )}
 
+          {/* Smart search results floating badge */}
+          {smartSearchResults && smartSearchResults.length > 0 && !selectedNode && (
+            <div className="animate-fade-in"
+              style={{
+                position: 'absolute', top: 12, left: 12, zIndex: 20,
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'rgba(12, 18, 32, 0.9)', backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(168, 85, 247, 0.2)', borderRadius: 10,
+                padding: '6px 12px',
+              }}>
+              <Sparkles size={13} style={{ color: '#a855f7' }} />
+              <span className="text-[11px] font-medium" style={{ color: 'var(--cni-text)' }}>
+                {smartSearchResults.length} files match "{smartSearchQuery}"
+              </span>
+              <button onClick={clearSmartSearch} className="ml-1 transition-colors"
+                style={{ color: 'var(--cni-muted)' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}>
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
           {/* Hover tooltip */}
           {hoverNode && (
             <div style={{ position: 'absolute', left: 16, bottom: 16, background: 'rgba(12,18,32,0.92)', border: '1px solid var(--cni-border)', backdropFilter: 'blur(8px)', borderRadius: 12, padding: '8px 12px', zIndex: 20, pointerEvents: 'none' }}
@@ -509,6 +773,12 @@ export default function GraphPage() {
               <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>
                 in: <span style={{ color: '#60a5fa' }}>{hoverNode.indegree}</span>{' · '}out: <span style={{ color: '#22d3ee' }}>{hoverNode.outdegree}</span>
               </p>
+              {/* Show smart search score if available */}
+              {smartScoreMap && (smartScoreMap.get(hoverNode.id) || smartScoreMap.get(hoverNode.label)) && (
+                <p className="text-xs mt-0.5" style={{ color: '#a855f7' }}>
+                  relevance: {Math.round((smartScoreMap.get(hoverNode.id) || smartScoreMap.get(hoverNode.label)) * 100)}%
+                </p>
+              )}
             </div>
           )}
 
@@ -611,6 +881,15 @@ export default function GraphPage() {
                     <p className="text-xl font-bold" style={{ color: '#22d3ee' }}>{selectedNode.outdegree}</p>
                   </div>
                 </div>
+                {/* Show relevance score if from smart search */}
+                {smartScoreMap && (smartScoreMap.get(selectedNode.id) || smartScoreMap.get(selectedNode.label)) && (
+                  <div className="glass-card p-3 text-center" style={{ borderColor: 'rgba(168, 85, 247, 0.2)' }}>
+                    <p className="text-xs mb-0.5" style={{ color: 'var(--cni-muted)' }}>Relevance</p>
+                    <p className="text-xl font-bold" style={{ color: '#a855f7' }}>
+                      {Math.round((smartScoreMap.get(selectedNode.id) || smartScoreMap.get(selectedNode.label)) * 100)}%
+                    </p>
+                  </div>
+                )}
                 {detailsLoading ? (
                   <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--cni-muted)' }}>
                     <div className="w-3 h-3 border rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
