@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useGraph } from '../../hooks/useGraph';
 import { useAnalysisContext } from '../client-layout';
+import { useAppContext } from '../../context/AppContext';
 import { explainFile } from '../../lib/api';
 import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera } from 'lucide-react';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
+import GraphChat from '../../components/GraphChat';
 
 // Manual dynamic import that preserves ref forwarding
 function useForceGraph() {
@@ -38,19 +40,26 @@ const HEADER_H = 56;
 const FILTER_H = 42;
 const STATUS_H = 36;
 const PANEL_W = 320;
+const CHAT_OPEN_W = 350;
+const CHAT_CLOSED_W = 40;
 
 export default function GraphPage() {
   const ForceGraph2D = useForceGraph();
   const { repoPath, stats } = useAnalysisContext();
+  const { setSelectedChatFile } = useAppContext();
   const { graphData, loading, error, notAnalyzed, fetchGraph } = useGraph();
   const fgRef = useRef(null);
+
+  // ── Chat sidebar state ──
+  const [chatOpen, setChatOpen] = useState(false);
 
   // ── Dimensions: simple window-based calc ──
   const [graphW, setGraphW] = useState(800);
   const [graphH, setGraphH] = useState(600);
 
-  const updateSize = useCallback((panelOpen) => {
-    const w = window.innerWidth - SIDEBAR_W - (panelOpen ? PANEL_W : 0);
+  const updateSize = useCallback((panelOpen, isChatOpen) => {
+    const chatW = isChatOpen ? CHAT_OPEN_W : CHAT_CLOSED_W;
+    const w = window.innerWidth - SIDEBAR_W - (panelOpen ? PANEL_W : 0) - chatW;
     const h = window.innerHeight - HEADER_H - FILTER_H - STATUS_H;
     setGraphW(Math.max(w, 100));
     setGraphH(Math.max(h, 100));
@@ -86,11 +95,11 @@ export default function GraphPage() {
 
   // Resize listener
   useEffect(() => {
-    updateSize(panelOpen);
-    const onResize = () => updateSize(panelOpen);
+    updateSize(panelOpen, chatOpen);
+    const onResize = () => updateSize(panelOpen, chatOpen);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [panelOpen, updateSize]);
+  }, [panelOpen, chatOpen, updateSize]);
 
   useEffect(() => {
     if (repoPath && stats) fetchGraph(repoPath);
@@ -188,11 +197,13 @@ export default function GraphPage() {
     setHighlightLinks(links);
     setSelectedNode(node);
     setSearchHighlight(null);
+    // Set the chat context to this node
+    setSelectedChatFile(node);
     setDetailsLoading(true);
     try { const details = await explainFile(node.label, repoPath); setNodeDetails(details); }
     catch { setNodeDetails(null); }
     finally { setDetailsLoading(false); }
-  }, [repoPath, getNeighbors]);
+  }, [repoPath, getNeighbors, setSelectedChatFile]);
 
   const handleNodeHover = useCallback((node) => {
     setHoverNode(node || null);
@@ -211,10 +222,12 @@ export default function GraphPage() {
     setHighlightNodes(nodes);
     setHighlightLinks(links);
     setSelectedNode(node);
+    // Set the chat context to this node
+    setSelectedChatFile(node);
     if (fgRef.current) { fgRef.current.centerAt(node.x, node.y, 500); fgRef.current.zoom(3, 500); }
     setDetailsLoading(true);
     explainFile(node.label, repoPath).then(setNodeDetails).catch(() => setNodeDetails(null)).finally(() => setDetailsLoading(false));
-  }, [repoPath, getNeighbors]);
+  }, [repoPath, getNeighbors, setSelectedChatFile]);
 
   const handleDetailNodeClick = useCallback((targetLabel) => {
     const node = filteredData.nodes.find(n => n.label === targetLabel || n.id.endsWith(targetLabel));
@@ -430,10 +443,10 @@ export default function GraphPage() {
         </span>
       </div>
 
-      {/* ══════ Graph + Panel row ══════ */}
+      {/* ══════ Graph + Panel + Chat row ══════ */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
         {/* Graph area */}
-        <div style={{ position: 'relative', width: graphW, height: graphH, background: '#060a13' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0, height: graphH, background: '#060a13', transition: 'width 300ms ease' }}>
           {loading && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, background: 'rgba(6,10,19,0.85)' }}>
               <div className="text-center space-y-3">
@@ -645,6 +658,9 @@ export default function GraphPage() {
             </div>
           </div>
         )}
+
+        {/* ══════ Chat Sidebar ══════ */}
+        <GraphChat isOpen={chatOpen} onToggle={() => setChatOpen(!chatOpen)} />
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { useAppContext } from '../context/AppContext';
 /**
  * Thin wrapper around AppContext for chat state.
  * Messages now persist across page navigation.
+ * Includes selectedFile for graph-chat context awareness.
  */
 export function useChat() {
   const ctx = useAppContext();
@@ -23,5 +24,7 @@ export function useChat() {
     loadSession: ctx.loadChatSession,
     removeSession: ctx.removeChatSession,
     refreshSessions: ctx.refreshChatSessions,
+    selectedFile: ctx.selectedChatFile,
+    setSelectedFile: ctx.setSelectedChatFile,
   };
 }

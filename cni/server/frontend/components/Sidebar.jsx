@@ -7,7 +7,6 @@ import { useAppContext } from '../context/AppContext';
 const NAV_ITEMS = [
   { href: '/',        label: 'Dashboard', icon: '⬡' },
   { href: '/graph',   label: 'Graph',     icon: '◎' },
-  { href: '/chat',    label: 'Chat',      icon: '◈' },
   { href: '/health',  label: 'Health',    icon: '♥' },
   { href: '/impact',  label: 'Impact',    icon: '⚡' },
   { href: '/onboard', label: 'Onboard',   icon: '◉' },

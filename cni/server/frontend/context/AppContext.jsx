@@ -117,6 +117,11 @@ export default function AppContextProvider({ children }) {
   const [onboardSessionsOpen, setOnboardSessionsOpen] = useState(false);
   const onboardWsRef = useRef(null);
 
+  // ══════════════════════════════════════════════════════════════════
+  //  Graph Chat — selected file context
+  // ══════════════════════════════════════════════════════════════════
+  const [selectedChatFile, setSelectedChatFile] = useState(null);
+
   // ── localStorage: persist chat messages (with 4MB size safety) ──
   useEffect(() => {
     try {
@@ -670,6 +675,9 @@ export default function AppContextProvider({ children }) {
     chatSessionId, chatSessions, chatSessionsOpen, setChatSessionsOpen,
     sendChatMessage, clearChat, startNewChatSession,
     loadChatSession, removeChatSession, refreshChatSessions,
+
+    // Graph chat file context
+    selectedChatFile, setSelectedChatFile,
 
     // Onboard chat
     onboardChatMessages, onboardChatStreaming, onboardChatError, onboardOllamaDown,

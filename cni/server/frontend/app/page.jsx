@@ -103,9 +103,9 @@ export default function DashboardPage() {
       {/* Quick links */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { href: '/graph', label: 'Dependency Graph', desc: 'Interactive force-directed visualization', icon: '◎' },
-          { href: '/chat', label: 'Ask CNI', desc: 'Query your codebase with LLM', icon: '◈' },
+          { href: '/graph', label: 'Dependency Graph', desc: 'Interactive visualization with built-in chat', icon: '◎' },
           { href: '/health', label: 'Health Report', desc: 'God modules, coupling analysis', icon: '♥' },
+          { href: '/onboard', label: 'Onboard', desc: 'Architecture overview for new contributors', icon: '◉' },
         ].map(({ href, label, desc, icon }) => (
           <a key={href} href={href}
             className="glass-card p-5 transition-all duration-300 group"
