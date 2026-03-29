@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 import { useAnalysisContext } from '../client-layout';
+import { Download } from 'lucide-react';
+import { exportHealthReport } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
@@ -33,6 +35,24 @@ export default function HealthPage() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
+      {/* Header with export */}
+      <div className="flex items-center justify-between">
+        <div />
+        <button
+          onClick={() => exportHealthReport(data, repoPath)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200"
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--cni-border)',
+            color: 'var(--cni-muted)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.3)'; e.currentTarget.style.color = '#60a5fa'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+        >
+          <Download size={14} /> Export Report
+        </button>
+      </div>
+
       {/* Score */}
       <div className="glass-card p-8 text-center" style={{ boxShadow: `0 0 40px ${scoreColor}15` }}>
         <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--cni-muted)' }}>Codebase Health Score</p>

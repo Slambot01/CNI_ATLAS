@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAnalysisContext } from '../client-layout';
+import { Download } from 'lucide-react';
+import { exportImpactReport } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 
@@ -59,6 +61,21 @@ export default function ImpactPage() {
 
       {data && (
         <div className="space-y-4 animate-slide-up">
+          <div className="flex justify-end">
+            <button
+              onClick={() => exportImpactReport(data, cachedFile, repoPath)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--cni-border)',
+                color: 'var(--cni-muted)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.3)'; e.currentTarget.style.color = '#60a5fa'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+            >
+              <Download size={14} /> Export Report
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="glass-card p-5 text-center">
               <p className="text-xs mb-2" style={{ color: 'var(--cni-muted)' }}>Risk Level</p>

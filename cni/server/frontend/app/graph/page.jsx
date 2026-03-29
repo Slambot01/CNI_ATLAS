@@ -5,7 +5,8 @@ import { useGraph } from '../../hooks/useGraph';
 import { useAnalysisContext } from '../client-layout';
 import { useAppContext } from '../../context/AppContext';
 import { explainFile, semanticSearch, findPath } from '../../lib/api';
-import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera, Search, Sparkles, X, Route, ArrowRight, RefreshCw } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera, Search, Sparkles, X, Route, ArrowRight, RefreshCw, Download } from 'lucide-react';
+import { exportGraphData } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
@@ -904,6 +905,21 @@ export default function GraphPage() {
         <span className="text-xs ml-3 flex-shrink-0" style={{ color: 'var(--cni-muted)' }}>
           {filteredData.nodes.length} nodes · {filteredData.links.length} edges
         </span>
+
+        <button
+          onClick={() => exportGraphData(filteredData.nodes, filteredData.links, repoPath)}
+          title="Export graph data as JSON"
+          className="px-2.5 py-1 text-xs rounded-lg transition-all duration-200 flex items-center gap-1.5 flex-shrink-0"
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--cni-border)',
+            color: 'var(--cni-muted)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.3)'; e.currentTarget.style.color = '#60a5fa'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+        >
+          <Download size={13} /> Export
+        </button>
       </div>
 
       {/* ══════ Path Result Panel ══════ */}

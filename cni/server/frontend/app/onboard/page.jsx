@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAnalysisContext } from '../client-layout';
 import { useOnboardChat } from '../../hooks/useOnboardChat';
-import { Send, MessageSquare, Trash2, MessageSquarePlus, History, ChevronDown } from 'lucide-react';
+import { Send, MessageSquare, Trash2, MessageSquarePlus, History, ChevronDown, Download } from 'lucide-react';
+import { exportOnboardReport } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
@@ -110,7 +111,22 @@ export default function OnboardPage() {
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      <h2 className="text-lg font-bold" style={{ color: 'var(--cni-text)' }}>Onboarding Report</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold" style={{ color: 'var(--cni-text)' }}>Onboarding Report</h2>
+        <button
+          onClick={() => exportOnboardReport(data, repoPath)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200"
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--cni-border)',
+            color: 'var(--cni-muted)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.3)'; e.currentTarget.style.color = '#60a5fa'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+        >
+          <Download size={14} /> Export Report
+        </button>
+      </div>
 
       {/* ── Entry Points ── */}
       <div className="glass-card p-5">
