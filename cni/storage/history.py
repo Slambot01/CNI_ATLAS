@@ -86,6 +86,18 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_analysis_repo
             ON analysis_history (repo_path);
+
+        CREATE TABLE IF NOT EXISTS bookmarks (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_path   TEXT    NOT NULL,
+            file_path   TEXT    NOT NULL,
+            note        TEXT    DEFAULT '',
+            created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(repo_path, file_path)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_repo
+            ON bookmarks (repo_path);
         """
     )
 
@@ -334,4 +346,88 @@ def get_analysis_history(repo_path: str, limit: int = 10) -> list[dict]:
             return [dict(r) for r in rows]
     except Exception:
         log.warning("Failed to load analysis history", exc_info=True)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Bookmarks
+# ---------------------------------------------------------------------------
+
+def add_bookmark(
+    repo_path: str,
+    file_path: str,
+    note: str = "",
+) -> None:
+    """Add a bookmark for *file_path* in *repo_path*.
+
+    If the bookmark already exists, the call is silently ignored.
+
+    Args:
+        repo_path: Resolved path to the repository root.
+        file_path: Relative file path within the repository.
+        note:      Optional short note about the bookmark.
+    """
+    try:
+        with _connect(repo_path) as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO bookmarks (repo_path, file_path, note)
+                VALUES (?, ?, ?)
+                """,
+                (repo_path, file_path, note),
+            )
+    except Exception:
+        log.warning("Failed to add bookmark", exc_info=True)
+
+
+def remove_bookmark(repo_path: str, file_path: str) -> None:
+    """Remove the bookmark for *file_path* in *repo_path*.
+
+    Args:
+        repo_path: Resolved path to the repository root.
+        file_path: Relative file path within the repository.
+    """
+    try:
+        with _connect(repo_path) as conn:
+            conn.execute(
+                """
+                DELETE FROM bookmarks
+                WHERE repo_path = ? AND file_path = ?
+                """,
+                (repo_path, file_path),
+            )
+    except Exception:
+        log.warning("Failed to remove bookmark", exc_info=True)
+
+
+def get_bookmarks(repo_path: str) -> list[dict]:
+    """Return all bookmarks for *repo_path*.
+
+    Args:
+        repo_path: Resolved path to the repository root.
+
+    Returns:
+        List of dicts with keys ``file_path``, ``note``, ``created_at``.
+    """
+    try:
+        with _connect(repo_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT file_path, note, created_at
+                FROM bookmarks
+                WHERE repo_path = ?
+                ORDER BY created_at DESC
+                """,
+                (repo_path,),
+            ).fetchall()
+            return [
+                {
+                    "file_path": r["file_path"],
+                    "note": r["note"],
+                    "created_at": r["created_at"],
+                }
+                for r in rows
+            ]
+    except Exception:
+        log.warning("Failed to load bookmarks", exc_info=True)
         return []

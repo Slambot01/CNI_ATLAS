@@ -5,7 +5,7 @@ import { useGraph } from '../../hooks/useGraph';
 import { useAnalysisContext } from '../client-layout';
 import { useAppContext } from '../../context/AppContext';
 import { explainFile, semanticSearch, findPath } from '../../lib/api';
-import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera, Search, Sparkles, X, Route, ArrowRight, RefreshCw, Download } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera, Search, Sparkles, X, Route, ArrowRight, RefreshCw, Download, Star } from 'lucide-react';
 import { exportGraphData } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
@@ -48,7 +48,7 @@ const CHAT_CLOSED_W = 40;
 export default function GraphPage() {
   const ForceGraph2D = useForceGraph();
   const { repoPath, stats } = useAnalysisContext();
-  const { setSelectedChatFile } = useAppContext();
+  const { setSelectedChatFile, bookmarks, addBookmark, removeBookmark, isBookmarked } = useAppContext();
   const { graphData, loading, error, notAnalyzed, fetchGraph } = useGraph();
   const fgRef = useRef(null);
 
@@ -110,6 +110,16 @@ export default function GraphPage() {
 
   const panelOpen = !!selectedNode;
 
+  // Bookmark note input state
+  const [bookmarkNote, setBookmarkNote] = useState('');
+
+  // Set of bookmarked file labels for O(1) lookup in painting
+  const bookmarkedFiles = useMemo(() => {
+    const set = new Set();
+    bookmarks.forEach((b) => set.add(b.file));
+    return set;
+  }, [bookmarks]);
+
   // Build a map of filename -> score from smart search results for fast lookup
   const smartScoreMap = useMemo(() => {
     if (!smartSearchResults) return null;
@@ -134,6 +144,7 @@ export default function GraphPage() {
   useEffect(() => {
     if (repoPath && stats) fetchGraph(repoPath);
   }, [repoPath, stats, fetchGraph]);
+
 
   // Fullscreen
   useEffect(() => {
@@ -429,6 +440,23 @@ export default function GraphPage() {
     explainFile(node.label, repoPath).then(setNodeDetails).catch(() => setNodeDetails(null)).finally(() => setDetailsLoading(false));
   }, [repoPath, getNeighbors, setSelectedChatFile]);
 
+  // Handle ?search= param from sidebar bookmark click
+  useEffect(() => {
+    if (typeof window === 'undefined' || filteredData.nodes.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const searchFile = params.get('search');
+    if (!searchFile) return;
+    // Clear the param so it doesn't re-trigger
+    window.history.replaceState({}, '', window.location.pathname);
+    // Find and select the node
+    const node = filteredData.nodes.find(
+      (n) => n.label === searchFile || n.id.endsWith(searchFile)
+    );
+    if (node) {
+      setTimeout(() => handleSearchSelect(node), 600);
+    }
+  }, [filteredData.nodes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSmartResultClick = useCallback((result) => {
     const node = filteredData.nodes.find(n => n.id === result.path || n.label === result.file);
     if (node && fgRef.current) {
@@ -568,7 +596,31 @@ export default function GraphPage() {
       ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
       ctx.fillText(node.label, node.x, node.y + radius + 2);
     }
-  }, [highlightNodes, hoverNode, searchHighlight, getNodeColor, smartScoreMap, selectedNode, pathNodeSet, pathMode, pathSource, pathTarget]);
+
+    // Draw yellow star on bookmarked nodes
+    if (isActive && bookmarkedFiles.has(node.label)) {
+      const starSize = Math.max(3, Math.min(5, radius * 0.45));
+      const starX = node.x;
+      const starY = node.y - radius - starSize - 1;
+      const spikes = 5;
+      const outerR = starSize;
+      const innerR = starSize * 0.45;
+      ctx.beginPath();
+      for (let i = 0; i < spikes * 2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const angle = (Math.PI * i) / spikes - Math.PI / 2;
+        const sx = starX + Math.cos(angle) * r;
+        const sy = starY + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#FFD700';
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }, [highlightNodes, hoverNode, searchHighlight, getNodeColor, smartScoreMap, selectedNode, pathNodeSet, pathMode, pathSource, pathTarget, bookmarkedFiles]);
 
   // ── Edge color ──
   const getLinkColor = useCallback((link) => {
@@ -1237,6 +1289,53 @@ export default function GraphPage() {
                 <div className="flex gap-2 pt-2">
                   <a href={`/impact?file=${encodeURIComponent(selectedNode.label)}`}
                     className="btn-primary text-xs flex-1 text-center py-2">⚡ Impact</a>
+                </div>
+
+                {/* Bookmark toggle */}
+                <div className="pt-2" style={{ borderTop: '1px solid var(--cni-border)' }}>
+                  {isBookmarked(selectedNode.label) ? (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => removeBookmark(selectedNode.label)}
+                        className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs transition-all duration-200"
+                        style={{
+                          background: 'rgba(255, 215, 0, 0.08)',
+                          border: '1px solid rgba(255, 215, 0, 0.2)',
+                          color: '#FFD700',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; e.currentTarget.style.color = '#f87171'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255, 215, 0, 0.2)'; e.currentTarget.style.color = '#FFD700'; }}
+                      >
+                        <Star size={13} fill="#FFD700" /> Bookmarked — click to remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Add a note..."
+                        value={bookmarkNote}
+                        onChange={(e) => setBookmarkNote(e.target.value)}
+                        className="input-field w-full text-xs"
+                      />
+                      <button
+                        onClick={() => {
+                          addBookmark(selectedNode.label, bookmarkNote);
+                          setBookmarkNote('');
+                        }}
+                        className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs transition-all duration-200"
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid var(--cni-border)',
+                          color: 'var(--cni-muted)',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255, 215, 0, 0.3)'; e.currentTarget.style.color = '#FFD700'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+                      >
+                        <Star size={13} /> Bookmark this file
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

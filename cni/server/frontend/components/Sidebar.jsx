@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAppContext } from '../context/AppContext';
+import { Star, X, ChevronDown } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/',        label: 'Dashboard', icon: '⬡' },
@@ -14,14 +16,28 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const ctx = useAppContext();
   const isAnalyzed = ctx?.isAnalyzed;
   const repoPath = ctx?.repoPath || '';
+  const bookmarks = ctx?.bookmarks || [];
+  const removeBookmark = ctx?.removeBookmark;
+
+  const [bookmarksOpen, setBookmarksOpen] = useState(true);
 
   // Extract short name from path (last directory segment)
   const shortName = repoPath
     ? repoPath.replace(/\\/g, '/').split('/').filter(Boolean).pop() || repoPath
     : '';
+
+  const handleBookmarkClick = (file) => {
+    // Navigate to graph and highlight that node (via query param)
+    router.push(`/graph?search=${encodeURIComponent(file)}`);
+  };
+
+  const maxShow = 8;
+  const visibleBookmarks = bookmarks.slice(0, maxShow);
+  const extraCount = bookmarks.length - maxShow;
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-16 flex flex-col items-center py-4 z-50"
@@ -36,7 +52,7 @@ export default function Sidebar() {
       </Link>
 
       {/* Navigation */}
-      <nav className="flex-1 flex flex-col items-center gap-1">
+      <nav className="flex flex-col items-center gap-1">
         {NAV_ITEMS.map(({ href, label, icon }) => {
           const isActive = pathname === href;
           return (
@@ -61,6 +77,68 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Bookmarks section */}
+      {bookmarks.length > 0 && (
+        <div className="mt-3 w-full px-1.5">
+          <button
+            onClick={() => setBookmarksOpen(!bookmarksOpen)}
+            className="w-full flex items-center justify-center gap-0.5 py-1.5 rounded-lg text-[9px] font-medium transition-all duration-200 group relative"
+            style={{ color: '#FFD700' }}
+            title={`${bookmarks.length} bookmark${bookmarks.length !== 1 ? 's' : ''}`}
+          >
+            <Star size={11} fill="#FFD700" />
+            <span>{bookmarks.length}</span>
+            <ChevronDown size={8} className={`transition-transform duration-200 ${bookmarksOpen ? 'rotate-180' : ''}`} />
+            {/* Tooltip */}
+            <span className="absolute left-full ml-3 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200"
+              style={{ background: 'var(--cni-surface-2)', border: '1px solid var(--cni-border)', color: 'var(--cni-text)' }}>
+              Bookmarks
+            </span>
+          </button>
+
+          {bookmarksOpen && (
+            <div className="mt-1 space-y-0.5 animate-fade-in">
+              {visibleBookmarks.map((bm) => (
+                <div
+                  key={bm.file}
+                  className="relative group"
+                >
+                  <button
+                    onClick={() => handleBookmarkClick(bm.file)}
+                    className="w-full px-1.5 py-1.5 rounded-lg text-[8px] font-mono truncate text-left transition-all duration-150"
+                    style={{ color: 'var(--cni-muted)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255, 215, 0, 0.06)'; e.currentTarget.style.color = '#FFD700'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+                    title={bm.note ? `${bm.file}\n📝 ${bm.note}` : bm.file}
+                  >
+                    {bm.file.split(/[/\\]/).pop()}
+                  </button>
+                  {/* Remove button on hover */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeBookmark(bm.file); }}
+                    className="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all duration-150"
+                    style={{ color: 'var(--cni-muted)' }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}
+                    title="Remove bookmark"
+                  >
+                    <X size={8} />
+                  </button>
+                </div>
+              ))}
+              {extraCount > 0 && (
+                <p className="text-[8px] text-center py-0.5" style={{ color: 'var(--cni-muted)' }}>
+                  +{extraCount} more
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Spacer */}
+      <div className="flex-1" />
 
       {/* Repo indicator */}
       <div className="flex flex-col items-center gap-1.5 mb-1 group relative">

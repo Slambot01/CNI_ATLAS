@@ -13,6 +13,9 @@ import {
   getChatSessions,
   createNewSession,
   deleteSession,
+  getBookmarks as apiGetBookmarks,
+  addBookmark as apiAddBookmark,
+  removeBookmark as apiRemoveBookmark,
 } from '../lib/api';
 
 // ─── Context ─────────────────────────────────────────────────────────
@@ -150,6 +153,11 @@ export default function AppContextProvider({ children }) {
   // ══════════════════════════════════════════════════════════════════
   const [selectedChatFile, setSelectedChatFile] = useState(null);
 
+  // ══════════════════════════════════════════════════════════════════
+  //  Bookmarks
+  // ══════════════════════════════════════════════════════════════════
+  const [bookmarks, setBookmarks] = useState([]);
+
   // ── localStorage: persist chat messages (with 4MB size safety) ──
   useEffect(() => {
     try {
@@ -228,6 +236,11 @@ export default function AppContextProvider({ children }) {
 
       // Track in recent repos
       addRecentRepo(path, data.files || 0);
+
+      // Fetch bookmarks in background
+      apiGetBookmarks(path)
+        .then((res) => { if (!res?.error && res?.bookmarks) setBookmarks(res.bookmarks); })
+        .catch(() => {});
 
       return true; // success
     } catch (err) {
@@ -645,6 +658,41 @@ export default function AppContextProvider({ children }) {
   }, []);
 
   // ══════════════════════════════════════════════════════════════════
+  //  Bookmark helpers
+  // ══════════════════════════════════════════════════════════════════
+
+  const fetchBookmarks = useCallback(async () => {
+    if (!repoPath) return;
+    try {
+      const res = await apiGetBookmarks(repoPath);
+      if (!res?.error && res?.bookmarks) setBookmarks(res.bookmarks);
+    } catch { /* ignore */ }
+  }, [repoPath]);
+
+  const addBookmarkFn = useCallback(async (file, note = '') => {
+    if (!repoPath) return;
+    try {
+      await apiAddBookmark(file, note, repoPath);
+      setBookmarks((prev) => {
+        if (prev.some((b) => b.file === file)) return prev;
+        return [{ file, note, created_at: new Date().toISOString() }, ...prev];
+      });
+    } catch { /* ignore */ }
+  }, [repoPath]);
+
+  const removeBookmarkFn = useCallback(async (file) => {
+    if (!repoPath) return;
+    try {
+      await apiRemoveBookmark(file, repoPath);
+      setBookmarks((prev) => prev.filter((b) => b.file !== file));
+    } catch { /* ignore */ }
+  }, [repoPath]);
+
+  const isBookmarked = useCallback((file) => {
+    return bookmarks.some((b) => b.file === file);
+  }, [bookmarks]);
+
+  // ══════════════════════════════════════════════════════════════════
   //  clearAllState
   // ══════════════════════════════════════════════════════════════════
   const clearAllState = useCallback(() => {
@@ -677,6 +725,7 @@ export default function AppContextProvider({ children }) {
     setOnboardOllamaDown(false);
     setOnboardSessionId('');
     setOnboardSessions([]);
+    setBookmarks([]);
   }, []);
 
   // ══════════════════════════════════════════════════════════════════
@@ -721,6 +770,12 @@ export default function AppContextProvider({ children }) {
 
     // General
     clearAllState,
+
+    // Bookmarks
+    bookmarks, fetchBookmarks,
+    addBookmark: addBookmarkFn,
+    removeBookmark: removeBookmarkFn,
+    isBookmarked,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

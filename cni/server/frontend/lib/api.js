@@ -407,3 +407,55 @@ export async function findPath(source, target, path) {
     return parseError(err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Bookmarks
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/bookmarks — Fetch all bookmarks for the current repo.
+ * @param {string} path — repo path
+ * @returns {Promise<{bookmarks: Array<{file: string, note: string, created_at: string}>}>}
+ */
+export async function getBookmarks(path) {
+  try {
+    const { data } = await API.get('/api/bookmarks', { params: { path } });
+    if (data?.error && data?.hint) {
+      return { error: true, message: data.error, hint: data.hint };
+    }
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}
+
+/**
+ * POST /api/bookmarks — Add a bookmark.
+ * @param {string} file
+ * @param {string} note
+ * @param {string} path — repo path
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function addBookmark(file, note, path) {
+  try {
+    const { data } = await API.post('/api/bookmarks', { file, note, path });
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}
+
+/**
+ * DELETE /api/bookmarks — Remove a bookmark.
+ * @param {string} file
+ * @param {string} path — repo path
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function removeBookmark(file, path) {
+  try {
+    const { data } = await API.delete('/api/bookmarks', { data: { file, path } });
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}
