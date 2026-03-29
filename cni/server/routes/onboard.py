@@ -21,9 +21,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from cni.analysis.onboarder import generate_onboarding_report
+from cni.analysis.flow_tracer import detect_entry_points
 from cni.llm.llm_client import ask_llm, OLLAMA_BASE_URL, DEFAULT_MODEL
 from cni.server.state import repo_state, RepoStateError
-from cni.storage.history import save_message, new_session_id
+from cni.storage.history import (
+    save_message,
+    new_session_id,
+    mark_completed,
+    mark_uncompleted,
+    get_progress,
+)
 
 router = APIRouter(tags=["onboard"])
 
@@ -105,6 +112,17 @@ def _build_chat_prompt(report: dict, question: str) -> str:
     )
 
 
+def _not_analyzed() -> JSONResponse:
+    """Return a standard 400 response for un-analyzed repos."""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "No repo analyzed yet",
+            "hint": "Send POST /api/analyze first",
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # GET /api/onboard — existing report endpoint
 # ---------------------------------------------------------------------------
@@ -120,13 +138,7 @@ async def get_onboard(path: str = Query(..., description="Repository root path")
     try:
         report = _get_or_generate_report()
     except RepoStateError:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "No repo analyzed yet",
-                "hint": "Send POST /api/analyze first",
-            },
-        )
+        return _not_analyzed()
 
     return _format_report_for_api(report)
 
@@ -156,13 +168,7 @@ async def post_onboard_chat(body: OnboardChatRequest) -> dict:
         report = _get_or_generate_report()
         repo_path = repo_state.get_repo_path()
     except RepoStateError:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "No repo analyzed yet",
-                "hint": "Send POST /api/analyze first",
-            },
-        )
+        return _not_analyzed()
 
     prompt = _build_chat_prompt(report, body.question)
     answer = ask_llm(prompt, body.question)
@@ -270,3 +276,160 @@ async def ws_onboard_chat(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         pass
+
+
+# ---------------------------------------------------------------------------
+# GET /api/onboard/checklist — generate reading checklist
+# ---------------------------------------------------------------------------
+
+@router.get("/api/onboard/checklist")
+async def get_checklist(path: str = Query(".", description="Repository root path")) -> dict:
+    """Generate and return an ordered reading checklist.
+
+    The checklist is built from entry points, betweenness centrality,
+    config files, and utility files — limited to 15 items.
+    """
+    import networkx as nx
+
+    try:
+        graph = repo_state.get_graph()
+        file_paths = repo_state.get_file_paths()
+        repo_path = repo_state.get_repo_path()
+    except RepoStateError:
+        return _not_analyzed()
+
+    # 1. Detect entry points
+    entry_points = detect_entry_points(file_paths, repo_path)
+    ep_labels: list[str] = [Path(ep["file"]).name for ep in entry_points]
+
+    # 2. Betweenness centrality
+    centrality = nx.betweenness_centrality(graph)
+
+    # 3. Classify files
+    seen: set[str] = set()
+    items: list[dict] = []
+
+    # Entry points first
+    for ep in entry_points:
+        label = Path(ep["file"]).name
+        if label in seen:
+            continue
+        seen.add(label)
+        decorator = ep.get("decorator", "")
+        items.append({
+            "file": label,
+            "reason": f"Entry point — {decorator}" if decorator else "Entry point",
+            "category": "entry_point",
+        })
+
+    # Top centrality files (exclude entry points)
+    sorted_nodes = sorted(
+        centrality.items(),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    core_count = 0
+    for node_path, score in sorted_nodes:
+        if core_count >= 5:
+            break
+        label = Path(node_path).name
+        if label in seen or label == "__init__.py":
+            continue
+        seen.add(label)
+        items.append({
+            "file": label,
+            "reason": f"Core module — centrality {score:.3f}",
+            "category": "core",
+        })
+        core_count += 1
+
+    # Config files
+    config_keywords = {"config", "settings", "env"}
+    for fp in file_paths:
+        label = Path(fp).name
+        stem = Path(fp).stem.lower()
+        if label in seen:
+            continue
+        if any(k in stem for k in config_keywords):
+            seen.add(label)
+            items.append({
+                "file": label,
+                "reason": "Configuration",
+                "category": "config",
+            })
+
+    # Utility files
+    util_keywords = {"utils", "helpers", "common"}
+    for fp in file_paths:
+        label = Path(fp).name
+        stem = Path(fp).stem.lower()
+        if label in seen:
+            continue
+        if any(k in stem for k in util_keywords):
+            seen.add(label)
+            items.append({
+                "file": label,
+                "reason": "Shared utilities",
+                "category": "utility",
+            })
+
+    # Limit and number
+    items = items[:15]
+    checklist = [
+        {"order": i + 1, **item}
+        for i, item in enumerate(items)
+    ]
+
+    return {"checklist": checklist}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/onboard/checklist/progress — retrieve progress
+# ---------------------------------------------------------------------------
+
+@router.get("/api/onboard/checklist/progress")
+async def get_checklist_progress(
+    path: str = Query(".", description="Repository root path"),
+) -> dict:
+    """Return completion progress for all checklist items."""
+    try:
+        repo_path = repo_state.get_repo_path()
+    except RepoStateError:
+        return _not_analyzed()
+
+    rows = get_progress(repo_path)
+    return {
+        "progress": [
+            {"file": r["file_path"], "completed": r["completed"]}
+            for r in rows
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/onboard/checklist/toggle — toggle item
+# ---------------------------------------------------------------------------
+
+class ChecklistToggle(BaseModel):
+    """Body for POST /api/onboard/checklist/toggle."""
+
+    file: str
+    completed: bool
+    path: str
+
+
+@router.post("/api/onboard/checklist/toggle")
+async def toggle_checklist(body: ChecklistToggle) -> dict:
+    """Mark a checklist item as completed or uncompleted."""
+    try:
+        repo_path = repo_state.get_repo_path()
+    except RepoStateError:
+        return _not_analyzed()
+
+    if body.completed:
+        mark_completed(repo_path, body.file)
+    else:
+        mark_uncompleted(repo_path, body.file)
+
+    return {"success": True}
+

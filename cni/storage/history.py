@@ -98,6 +98,18 @@ def _ensure_tables(conn: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_bookmarks_repo
             ON bookmarks (repo_path);
+
+        CREATE TABLE IF NOT EXISTS checklist_progress (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_path   TEXT    NOT NULL,
+            file_path   TEXT    NOT NULL,
+            completed   BOOLEAN DEFAULT 0,
+            completed_at TIMESTAMP,
+            UNIQUE(repo_path, file_path)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_checklist_repo
+            ON checklist_progress (repo_path);
         """
     )
 
@@ -430,4 +442,85 @@ def get_bookmarks(repo_path: str) -> list[dict]:
             ]
     except Exception:
         log.warning("Failed to load bookmarks", exc_info=True)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Checklist progress
+# ---------------------------------------------------------------------------
+
+def mark_completed(repo_path: str, file_path: str) -> None:
+    """Mark *file_path* as completed in the reading checklist.
+
+    Inserts if not exists, updates if it does.
+
+    Args:
+        repo_path: Resolved path to the repository root.
+        file_path: File path (label) of the checklist item.
+    """
+    try:
+        with _connect(repo_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO checklist_progress (repo_path, file_path, completed, completed_at)
+                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(repo_path, file_path)
+                DO UPDATE SET completed = 1, completed_at = CURRENT_TIMESTAMP
+                """,
+                (repo_path, file_path),
+            )
+    except Exception:
+        log.warning("Failed to mark checklist item completed", exc_info=True)
+
+
+def mark_uncompleted(repo_path: str, file_path: str) -> None:
+    """Mark *file_path* as uncompleted in the reading checklist.
+
+    Args:
+        repo_path: Resolved path to the repository root.
+        file_path: File path (label) of the checklist item.
+    """
+    try:
+        with _connect(repo_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO checklist_progress (repo_path, file_path, completed, completed_at)
+                VALUES (?, ?, 0, NULL)
+                ON CONFLICT(repo_path, file_path)
+                DO UPDATE SET completed = 0, completed_at = NULL
+                """,
+                (repo_path, file_path),
+            )
+    except Exception:
+        log.warning("Failed to mark checklist item uncompleted", exc_info=True)
+
+
+def get_progress(repo_path: str) -> list[dict]:
+    """Return checklist progress for *repo_path*.
+
+    Args:
+        repo_path: Resolved path to the repository root.
+
+    Returns:
+        List of dicts with keys ``file_path`` and ``completed`` (bool).
+    """
+    try:
+        with _connect(repo_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT file_path, completed
+                FROM checklist_progress
+                WHERE repo_path = ?
+                """,
+                (repo_path,),
+            ).fetchall()
+            return [
+                {
+                    "file_path": r["file_path"],
+                    "completed": bool(r["completed"]),
+                }
+                for r in rows
+            ]
+    except Exception:
+        log.warning("Failed to load checklist progress", exc_info=True)
         return []

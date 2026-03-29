@@ -16,6 +16,9 @@ import {
   getBookmarks as apiGetBookmarks,
   addBookmark as apiAddBookmark,
   removeBookmark as apiRemoveBookmark,
+  getChecklist as apiGetChecklist,
+  getChecklistProgress as apiGetChecklistProgress,
+  toggleChecklistItem as apiToggleChecklistItem,
 } from '../lib/api';
 
 // ─── Context ─────────────────────────────────────────────────────────
@@ -157,6 +160,12 @@ export default function AppContextProvider({ children }) {
   //  Bookmarks
   // ══════════════════════════════════════════════════════════════════
   const [bookmarks, setBookmarks] = useState([]);
+
+  // ══════════════════════════════════════════════════════════════════
+  //  Checklist
+  // ══════════════════════════════════════════════════════════════════
+  const [checklist, setChecklist] = useState([]);
+  const [checklistProgress, setChecklistProgress] = useState({});
 
   // ── localStorage: persist chat messages (with 4MB size safety) ──
   useEffect(() => {
@@ -693,6 +702,44 @@ export default function AppContextProvider({ children }) {
   }, [bookmarks]);
 
   // ══════════════════════════════════════════════════════════════════
+  //  Checklist helpers
+  // ══════════════════════════════════════════════════════════════════
+
+  const fetchChecklist = useCallback(async () => {
+    if (!repoPath) return;
+    try {
+      const res = await apiGetChecklist(repoPath);
+      if (!res?.error && res?.checklist) setChecklist(res.checklist);
+    } catch { /* ignore */ }
+  }, [repoPath]);
+
+  const fetchChecklistProgress = useCallback(async () => {
+    if (!repoPath) return;
+    try {
+      const res = await apiGetChecklistProgress(repoPath);
+      if (!res?.error && res?.progress) {
+        const map = {};
+        res.progress.forEach((p) => { map[p.file] = p.completed; });
+        setChecklistProgress(map);
+      }
+    } catch { /* ignore */ }
+  }, [repoPath]);
+
+  const toggleChecklistItem = useCallback(async (file) => {
+    if (!repoPath) return;
+    const current = !!checklistProgress[file];
+    const next = !current;
+    // Optimistic update
+    setChecklistProgress((prev) => ({ ...prev, [file]: next }));
+    try {
+      await apiToggleChecklistItem(file, next, repoPath);
+    } catch {
+      // Revert on failure
+      setChecklistProgress((prev) => ({ ...prev, [file]: current }));
+    }
+  }, [repoPath, checklistProgress]);
+
+  // ══════════════════════════════════════════════════════════════════
   //  clearAllState
   // ══════════════════════════════════════════════════════════════════
   const clearAllState = useCallback(() => {
@@ -726,6 +773,8 @@ export default function AppContextProvider({ children }) {
     setOnboardSessionId('');
     setOnboardSessions([]);
     setBookmarks([]);
+    setChecklist([]);
+    setChecklistProgress({});
   }, []);
 
   // ══════════════════════════════════════════════════════════════════
@@ -776,6 +825,11 @@ export default function AppContextProvider({ children }) {
     addBookmark: addBookmarkFn,
     removeBookmark: removeBookmarkFn,
     isBookmarked,
+
+    // Checklist
+    checklist, checklistProgress,
+    fetchChecklist, fetchChecklistProgress,
+    toggleChecklistItem,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

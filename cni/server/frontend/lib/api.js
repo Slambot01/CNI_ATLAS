@@ -459,3 +459,57 @@ export async function removeBookmark(file, path) {
     return parseError(err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Onboarding Checklist
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/onboard/checklist — Fetch the reading checklist.
+ * @param {string} path — repo path
+ * @returns {Promise<{checklist: Array<{order: number, file: string, reason: string, category: string}>}>}
+ */
+export async function getChecklist(path) {
+  try {
+    const { data } = await API.get('/api/onboard/checklist', { params: { path } });
+    if (data?.error && data?.hint) {
+      return { error: true, message: data.error, hint: data.hint };
+    }
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}
+
+/**
+ * GET /api/onboard/checklist/progress — Fetch checklist progress.
+ * @param {string} path — repo path
+ * @returns {Promise<{progress: Array<{file: string, completed: boolean}>}>}
+ */
+export async function getChecklistProgress(path) {
+  try {
+    const { data } = await API.get('/api/onboard/checklist/progress', { params: { path } });
+    if (data?.error && data?.hint) {
+      return { error: true, message: data.error, hint: data.hint };
+    }
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}
+
+/**
+ * POST /api/onboard/checklist/toggle — Toggle a checklist item.
+ * @param {string} file
+ * @param {boolean} completed
+ * @param {string} path — repo path
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function toggleChecklistItem(file, completed, path) {
+  try {
+    const { data } = await API.post('/api/onboard/checklist/toggle', { file, completed, path });
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}

@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAnalysisContext } from '../client-layout';
 import { useOnboardChat } from '../../hooks/useOnboardChat';
-import { Send, MessageSquare, Trash2, MessageSquarePlus, History, ChevronDown, Download } from 'lucide-react';
+import { Send, MessageSquare, Trash2, MessageSquarePlus, History, ChevronDown, Download, BookOpen, CheckSquare, Square } from 'lucide-react';
 import { exportOnboardReport } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
+import { useAppContext } from '../../context/AppContext';
 
 export default function OnboardPage() {
   const {
@@ -36,12 +37,27 @@ export default function OnboardPage() {
   const messagesEndRef = useRef(null);
   const sessionsRef = useRef(null);
 
+  // Checklist from AppContext
+  const {
+    checklist, checklistProgress,
+    fetchChecklist, fetchChecklistProgress,
+    toggleChecklistItem,
+  } = useAppContext();
+
   // Fetch onboard data on mount (cached — returns instantly if already loaded)
   useEffect(() => {
     if (repoPath && stats) {
       fetchOnboard(repoPath);
     }
   }, [repoPath, stats, fetchOnboard]);
+
+  // Fetch checklist after onboard data loads
+  useEffect(() => {
+    if (data && repoPath) {
+      fetchChecklist();
+      fetchChecklistProgress();
+    }
+  }, [data, repoPath, fetchChecklist, fetchChecklistProgress]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -182,6 +198,132 @@ export default function OnboardPage() {
         <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--cni-text)' }}>Architecture Summary</h3>
         <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(226, 232, 240, 0.8)' }}>{data.summary}</p>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════════
+          Reading Checklist Section
+          ══════════════════════════════════════════════════════════════════ */}
+
+      {checklist.length > 0 && (() => {
+        // Group items by category
+        const CATEGORY_ORDER = ['entry_point', 'core', 'config', 'utility'];
+        const CATEGORY_LABELS = {
+          entry_point: 'Entry Points',
+          core: 'Core Modules',
+          config: 'Configuration',
+          utility: 'Utilities',
+        };
+        const groups = {};
+        checklist.forEach((item) => {
+          if (!groups[item.category]) groups[item.category] = [];
+          groups[item.category].push(item);
+        });
+        const completedCount = checklist.filter((item) => checklistProgress[item.file]).length;
+        const totalCount = checklist.length;
+        const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+        return (
+          <div className="glass-card p-5">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--cni-text)' }}>
+                <BookOpen size={16} className="text-blue-400" />
+                Reading Checklist
+              </h3>
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
+                {completedCount}/{totalCount} ({pct}%)
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="mb-5">
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700 ease-out"
+                  style={{
+                    width: `${pct}%`,
+                    background: pct === 100
+                      ? 'linear-gradient(90deg, #22c55e, #4ade80)'
+                      : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                    boxShadow: pct === 100
+                      ? '0 0 8px rgba(34, 197, 94, 0.4)'
+                      : '0 0 8px rgba(59, 130, 246, 0.3)',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Category groups */}
+            <div className="space-y-4">
+              {CATEGORY_ORDER.map((cat) => {
+                const items = groups[cat];
+                if (!items || items.length === 0) return null;
+                return (
+                  <div key={cat}>
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2"
+                      style={{ color: 'var(--cni-muted)' }}>
+                      {CATEGORY_LABELS[cat] || cat}
+                    </h4>
+                    <div className="space-y-1">
+                      {items.map((item) => {
+                        const done = !!checklistProgress[item.file];
+                        return (
+                          <div
+                            key={item.file}
+                            className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group cursor-pointer"
+                            style={{
+                              background: done ? 'rgba(34, 197, 94, 0.04)' : 'transparent',
+                              border: '1px solid transparent',
+                            }}
+                            onClick={() => toggleChecklistItem(item.file)}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = done ? 'rgba(34, 197, 94, 0.08)' : 'rgba(59, 130, 246, 0.06)';
+                              e.currentTarget.style.borderColor = done ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = done ? 'rgba(34, 197, 94, 0.04)' : 'transparent';
+                              e.currentTarget.style.borderColor = 'transparent';
+                            }}
+                          >
+                            {/* Checkbox icon */}
+                            <span className="flex-shrink-0 transition-transform duration-200" style={{ color: done ? '#4ade80' : 'var(--cni-muted)' }}>
+                              {done
+                                ? <CheckSquare size={16} className="animate-scale-in" />
+                                : <Square size={16} className="group-hover:scale-110 transition-transform" />
+                              }
+                            </span>
+                            {/* File name */}
+                            <a
+                              href={`/graph?search=${encodeURIComponent(item.file)}`}
+                              className="font-mono text-xs hover:underline transition-colors duration-150"
+                              style={{ color: done ? 'rgba(226, 232, 240, 0.5)' : 'var(--cni-text)', textDecoration: done ? 'line-through' : 'none' }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {item.file}
+                            </a>
+                            {/* Reason */}
+                            <span className="text-[11px] ml-auto hidden sm:block" style={{ color: 'var(--cni-muted)' }}>
+                              {item.reason}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Completion message */}
+            {pct === 100 && (
+              <div className="mt-4 text-center text-xs py-2 rounded-lg animate-fade-in"
+                style={{ background: 'rgba(34, 197, 94, 0.06)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.15)' }}>
+                🎉 All done! You&apos;ve reviewed the key files.
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ══════════════════════════════════════════════════════════════════
           Follow-Up Chat Section
