@@ -27,6 +27,7 @@ from cni.server.routes.explain import router as explain_router
 from cni.server.routes.chat_history import router as chat_history_router
 from cni.server.routes.history import router as history_router
 from cni.server.routes.search import router as search_router
+from cni.server.routes.path import router as path_router
 
 app = FastAPI(
     title="CNI API",
@@ -60,6 +61,7 @@ app.include_router(explain_router, prefix="/api")
 app.include_router(chat_history_router) # mounts /api/chat/history, sessions, new-session, session
 app.include_router(history_router, prefix="/api")
 app.include_router(search_router, prefix="/api")
+app.include_router(path_router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Static file serving (production: Next.js export)

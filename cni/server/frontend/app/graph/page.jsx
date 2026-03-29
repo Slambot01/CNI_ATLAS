@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useGraph } from '../../hooks/useGraph';
 import { useAnalysisContext } from '../client-layout';
 import { useAppContext } from '../../context/AppContext';
-import { explainFile, semanticSearch } from '../../lib/api';
-import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera, Search, Sparkles, X } from 'lucide-react';
+import { explainFile, semanticSearch, findPath } from '../../lib/api';
+import { ZoomIn, ZoomOut, Maximize, Expand, Shrink, Lock, Unlock, Camera, Search, Sparkles, X, Route, ArrowRight, RefreshCw } from 'lucide-react';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
@@ -38,6 +38,7 @@ function getFolderFromId(id) {
 const SIDEBAR_W = 64;
 const HEADER_H = 56;
 const FILTER_H = 42;
+const PATH_PANEL_H = 52;
 const STATUS_H = 36;
 const PANEL_W = 320;
 const CHAT_OPEN_W = 350;
@@ -57,10 +58,11 @@ export default function GraphPage() {
   const [graphW, setGraphW] = useState(800);
   const [graphH, setGraphH] = useState(600);
 
-  const updateSize = useCallback((panelOpen, isChatOpen) => {
+  const updateSize = useCallback((panelOpen, isChatOpen, hasPathPanel) => {
     const chatW = isChatOpen ? CHAT_OPEN_W : CHAT_CLOSED_W;
     const w = window.innerWidth - SIDEBAR_W - (panelOpen ? PANEL_W : 0) - chatW;
-    const h = window.innerHeight - HEADER_H - FILTER_H - STATUS_H;
+    const extraH = hasPathPanel ? PATH_PANEL_H : 0;
+    const h = window.innerHeight - HEADER_H - FILTER_H - STATUS_H - extraH;
     setGraphW(Math.max(w, 100));
     setGraphH(Math.max(h, 100));
   }, []);
@@ -82,6 +84,14 @@ export default function GraphPage() {
   const [smartSearchResults, setSmartSearchResults] = useState(null); // [{file, path, score}]
   const [smartSearchLoading, setSmartSearchLoading] = useState(false);
   const [smartSearchQuery, setSmartSearchQuery] = useState('');
+
+  // Path finder mode
+  const [pathMode, setPathMode] = useState(false);
+  const [pathSource, setPathSource] = useState(null);   // node object
+  const [pathTarget, setPathTarget] = useState(null);   // node object
+  const [pathResult, setPathResult] = useState(null);    // API result
+  const [pathLoading, setPathLoading] = useState(false);
+  const [pathStep, setPathStep] = useState('source');    // 'source' | 'target' | 'done'
 
   // Interaction
   const [selectedNode, setSelectedNode] = useState(null);
@@ -112,12 +122,13 @@ export default function GraphPage() {
   }, [smartSearchResults]);
 
   // Resize listener
+  const hasPathPanel = pathMode && (pathResult !== null || pathLoading);
   useEffect(() => {
-    updateSize(panelOpen, chatOpen);
-    const onResize = () => updateSize(panelOpen, chatOpen);
+    updateSize(panelOpen, chatOpen, hasPathPanel);
+    const onResize = () => updateSize(panelOpen, chatOpen, hasPathPanel);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [panelOpen, chatOpen, updateSize]);
+  }, [panelOpen, chatOpen, hasPathPanel, updateSize]);
 
   useEffect(() => {
     if (repoPath && stats) fetchGraph(repoPath);
@@ -241,7 +252,92 @@ export default function GraphPage() {
     setSmartSearchQuery('');
     setHighlightNodes(new Set());
     setHighlightLinks(new Set());
-  }, [searchMode]);
+    // Entering search clears path mode
+    if (pathMode) {
+      setPathMode(false); setPathSource(null); setPathTarget(null);
+      setPathResult(null); setPathStep('source');
+    }
+  }, [searchMode, pathMode]);
+
+  // ── Path finder ──
+  const pathNodeSet = useMemo(() => {
+    if (!pathResult?.found || !pathResult.full_path) return null;
+    return new Set(pathResult.full_path);
+  }, [pathResult]);
+
+  // Build ordered edges set for path highlighting
+  const pathEdgeSet = useMemo(() => {
+    if (!pathResult?.found || !pathResult.full_path) return null;
+    const edges = new Set();
+    for (let i = 0; i < pathResult.full_path.length - 1; i++) {
+      edges.add(`${pathResult.full_path[i]}→${pathResult.full_path[i + 1]}`);
+    }
+    return edges;
+  }, [pathResult]);
+
+  const clearPath = useCallback(() => {
+    setPathMode(false);
+    setPathSource(null);
+    setPathTarget(null);
+    setPathResult(null);
+    setPathLoading(false);
+    setPathStep('source');
+    setHighlightNodes(new Set());
+    setHighlightLinks(new Set());
+    setSelectedNode(null);
+    setNodeDetails(null);
+  }, []);
+
+  const togglePathMode = useCallback(() => {
+    if (pathMode) {
+      clearPath();
+    } else {
+      // Entering path mode clears smart search
+      setSmartSearchResults(null);
+      setSmartSearchQuery('');
+      setSearchQuery('');
+      setSearchResults([]);
+      setHighlightNodes(new Set());
+      setHighlightLinks(new Set());
+      setSelectedNode(null);
+      setNodeDetails(null);
+      setPathMode(true);
+      setPathSource(null);
+      setPathTarget(null);
+      setPathResult(null);
+      setPathStep('source');
+    }
+  }, [pathMode, clearPath]);
+
+  const runPathFinder = useCallback(async (sourceNode, targetNode) => {
+    if (!sourceNode || !targetNode || !repoPath) return;
+    setPathLoading(true);
+    setPathResult(null);
+    try {
+      const res = await findPath(sourceNode.label, targetNode.label, repoPath);
+      setPathResult(res);
+      if (res?.found && res.full_path) {
+        setHighlightNodes(new Set(res.full_path));
+        setHighlightLinks(new Set());
+      }
+      setPathStep('done');
+    } catch {
+      setPathResult({ found: false, path: [], length: 0 });
+      setPathStep('done');
+    } finally {
+      setPathLoading(false);
+    }
+  }, [repoPath]);
+
+  const handleSwapPath = useCallback(() => {
+    if (!pathSource || !pathTarget) return;
+    const tmp = pathSource;
+    setPathSource(pathTarget);
+    setPathTarget(tmp);
+    setPathResult(null);
+    setPathStep('done');
+    runPathFinder(pathTarget, tmp);
+  }, [pathSource, pathTarget, runPathFinder]);
 
   const getNodeColor = useCallback((node) => {
     if (colorMode === 'folder') return folderColorMap[getFolderFromId(node.id)] || '#64748b';
@@ -265,6 +361,29 @@ export default function GraphPage() {
   }, [filteredData.links]);
 
   const handleNodeClick = useCallback(async (node) => {
+    // ── Path mode: select source / target ──
+    if (pathMode) {
+      if (pathStep === 'source') {
+        setPathSource(node);
+        setPathTarget(null);
+        setPathResult(null);
+        setPathStep('target');
+        setHighlightNodes(new Set([node.id]));
+        setHighlightLinks(new Set());
+        return;
+      }
+      if (pathStep === 'target') {
+        if (node.id === pathSource?.id) return; // can't pick same node
+        setPathTarget(node);
+        setPathStep('done');
+        setHighlightNodes(new Set([pathSource.id, node.id]));
+        runPathFinder(pathSource, node);
+        return;
+      }
+      // If already 'done', clicking a node in the path opens details
+    }
+
+    // ── Normal mode ──
     const { nodes, links } = getNeighbors(node);
     setHighlightNodes(nodes);
     setHighlightLinks(links);
@@ -275,7 +394,7 @@ export default function GraphPage() {
     try { const details = await explainFile(node.label, repoPath); setNodeDetails(details); }
     catch { setNodeDetails(null); }
     finally { setDetailsLoading(false); }
-  }, [repoPath, getNeighbors, setSelectedChatFile]);
+  }, [repoPath, getNeighbors, setSelectedChatFile, pathMode, pathStep, pathSource, runPathFinder]);
 
   const handleNodeHover = useCallback((node) => {
     setHoverNode(node || null);
@@ -348,12 +467,39 @@ export default function GraphPage() {
     const cg = parseInt(color.slice(3, 5), 16) || 150;
     const cb = parseInt(color.slice(5, 7), 16) || 250;
 
-    // Determine alpha and glow based on smart search or node click highlighting
+    // Determine alpha and glow based on current mode
     let alpha = 1;
     let glowRadius = 0;
     let glowAlpha = 0;
+    let glowColor = null; // custom glow color for path mode
 
-    if (smartScoreMap && !selectedNode) {
+    // ── Path mode rendering ──
+    if (pathNodeSet) {
+      const isSource = pathSource && node.id === pathSource.id;
+      const isTarget = pathTarget && node.id === pathTarget.id;
+      const inPath = pathNodeSet.has(node.id);
+
+      if (isSource) {
+        alpha = 1; glowRadius = 12; glowAlpha = 0.4;
+        glowColor = 'rgba(34, 197, 94, ALPHA)'; // green
+      } else if (isTarget) {
+        alpha = 1; glowRadius = 12; glowAlpha = 0.4;
+        glowColor = 'rgba(239, 68, 68, ALPHA)'; // red
+      } else if (inPath) {
+        alpha = 1; glowRadius = 8; glowAlpha = 0.3;
+        glowColor = 'rgba(250, 204, 21, ALPHA)'; // yellow
+      } else {
+        alpha = 0.08;
+      }
+    } else if (pathMode && pathSource && !pathTarget) {
+      // Selecting source: highlight source, dim rest slightly
+      if (node.id === pathSource.id) {
+        alpha = 1; glowRadius = 12; glowAlpha = 0.4;
+        glowColor = 'rgba(34, 197, 94, ALPHA)';
+      } else {
+        alpha = 0.35;
+      }
+    } else if (smartScoreMap && !selectedNode) {
       // Smart search mode: highlight by score
       const score = smartScoreMap.get(node.id) || smartScoreMap.get(node.label) || 0;
       if (score > 0) {
@@ -374,7 +520,11 @@ export default function GraphPage() {
     if ((isActive && glowRadius > 0) || isSearched) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius + (isSearched ? 8 : glowRadius || 4), 0, 2 * Math.PI);
-      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${isSearched ? 0.3 : glowAlpha || 0.12})`;
+      if (glowColor) {
+        ctx.fillStyle = glowColor.replace('ALPHA', String(isSearched ? 0.3 : glowAlpha || 0.12));
+      } else {
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${isSearched ? 0.3 : glowAlpha || 0.12})`;
+      }
       ctx.fill();
     } else if (isActive && (highlightNodes.size === 0 || highlightNodes.has(node.id))) {
       if (isHovered) {
@@ -391,12 +541,24 @@ export default function GraphPage() {
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
     ctx.fill();
-    ctx.strokeStyle = isHovered ? '#fff' : 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = isHovered ? 1.2 : 0.4;
+
+    // For path nodes, add a colored border
+    if (pathNodeSet && pathNodeSet.has(node.id)) {
+      const isSource = pathSource && node.id === pathSource.id;
+      const isTarget = pathTarget && node.id === pathTarget.id;
+      ctx.strokeStyle = isSource ? '#22c55e' : isTarget ? '#ef4444' : '#facc15';
+      ctx.lineWidth = 2;
+    } else {
+      ctx.strokeStyle = isHovered ? '#fff' : 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = isHovered ? 1.2 : 0.4;
+    }
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    const showLabel = isHovered || isSearched || node.indegree >= 3 || globalScale > 2 || (smartScoreMap && (smartScoreMap.get(node.id) || smartScoreMap.get(node.label)));
+    const showLabel = isHovered || isSearched || node.indegree >= 3 || globalScale > 2
+      || (smartScoreMap && (smartScoreMap.get(node.id) || smartScoreMap.get(node.label)))
+      || (pathNodeSet && pathNodeSet.has(node.id))
+      || (pathMode && pathSource && node.id === pathSource.id);
     if (showLabel && isActive) {
       const fs = Math.max(10 / globalScale, 2.5);
       ctx.font = `${fs}px 'JetBrains Mono', monospace`;
@@ -405,13 +567,19 @@ export default function GraphPage() {
       ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
       ctx.fillText(node.label, node.x, node.y + radius + 2);
     }
-  }, [highlightNodes, hoverNode, searchHighlight, getNodeColor, smartScoreMap, selectedNode]);
+  }, [highlightNodes, hoverNode, searchHighlight, getNodeColor, smartScoreMap, selectedNode, pathNodeSet, pathMode, pathSource, pathTarget]);
 
   // ── Edge color ──
   const getLinkColor = useCallback((link) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
     const key = `${s}→${t}`;
+
+    // ── Path mode: only highlight path edges ──
+    if (pathEdgeSet) {
+      if (pathEdgeSet.has(key)) return 'rgba(250, 204, 21, 0.9)';
+      return 'rgba(30, 34, 53, 0.03)';
+    }
 
     // In smart search mode with no node selected, dim all edges
     if (smartScoreMap && !selectedNode) {
@@ -435,7 +603,35 @@ export default function GraphPage() {
     const targetNode = filteredData.nodes.find(n => n.id === t);
     if (targetNode && targetNode.indegree >= 10) return 'rgba(248, 113, 113, 0.15)';
     return 'rgba(71, 85, 105, 0.08)';
-  }, [highlightLinks, circularPairs, filteredData.nodes, smartScoreMap, selectedNode]);
+  }, [highlightLinks, circularPairs, filteredData.nodes, smartScoreMap, selectedNode, pathEdgeSet]);
+
+  const getLinkWidth = useCallback((link) => {
+    if (pathEdgeSet) {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      if (pathEdgeSet.has(`${s}→${t}`)) return 3;
+      return 0.3;
+    }
+    return highlightLinks.has(link) ? 1.5 : 0.5;
+  }, [highlightLinks, pathEdgeSet]);
+
+  const getLinkParticleWidth = useCallback((link) => {
+    if (pathEdgeSet) {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      if (pathEdgeSet.has(`${s}→${t}`)) return 4;
+    }
+    return 2;
+  }, [pathEdgeSet]);
+
+  const getLinkParticleSpeed = useCallback((link) => {
+    if (pathEdgeSet) {
+      const s = typeof link.source === 'object' ? link.source.id : link.source;
+      const t = typeof link.target === 'object' ? link.target.id : link.target;
+      if (pathEdgeSet.has(`${s}→${t}`)) return 0.012;
+    }
+    return 0.004;
+  }, [pathEdgeSet]);
 
   // ── Control handlers ──
   const handleZoomIn = useCallback(() => {
@@ -547,6 +743,32 @@ export default function GraphPage() {
           <option value="importance">Color: Importance</option>
           <option value="default">Color: Default</option>
         </select>
+
+        {/* ══════ Path Finder toggle ══════ */}
+        <button
+          onClick={togglePathMode}
+          title={pathMode ? 'Exit Path Finder' : 'Find Dependency Path'}
+          className="px-3 py-1 text-xs rounded-lg transition-all duration-200 flex items-center gap-1.5"
+          style={{
+            background: pathMode ? 'rgba(250, 204, 21, 0.12)' : 'transparent',
+            border: `1px solid ${pathMode ? 'rgba(250, 204, 21, 0.3)' : 'var(--cni-border)'}`,
+            color: pathMode ? '#facc15' : 'var(--cni-muted)',
+          }}
+        >
+          <Route size={13} />
+          Path Finder
+        </button>
+
+        {/* Path mode status indicator */}
+        {pathMode && !pathResult && !pathLoading && (
+          <span className="text-xs px-2 py-1 rounded-lg animate-pulse" style={{
+            color: pathStep === 'source' ? '#22c55e' : '#ef4444',
+            background: pathStep === 'source' ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+            border: `1px solid ${pathStep === 'source' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+          }}>
+            {pathStep === 'source' ? '① Click SOURCE node' : '② Click TARGET node'}
+          </span>
+        )}
 
         {/* ══════ Search area with mode toggle ══════ */}
         <div className="relative ml-auto flex items-center gap-1.5">
@@ -684,6 +906,73 @@ export default function GraphPage() {
         </span>
       </div>
 
+      {/* ══════ Path Result Panel ══════ */}
+      {pathMode && (pathResult !== null || pathLoading) && (
+        <div className="flex items-center gap-3 px-4 py-2 animate-fade-in" style={{
+          flexShrink: 0, borderBottom: '1px solid var(--cni-border)',
+          background: 'rgba(250, 204, 21, 0.03)',
+        }}>
+          {pathLoading ? (
+            <div className="flex items-center gap-2">
+              <div className="w-3.5 h-3.5 border-2 rounded-full animate-spin"
+                style={{ borderColor: 'var(--cni-border)', borderTopColor: '#facc15' }} />
+              <span className="text-xs" style={{ color: 'var(--cni-muted)' }}>Finding path…</span>
+            </div>
+          ) : pathResult?.found ? (
+            <>
+              <Route size={14} style={{ color: '#facc15', flexShrink: 0 }} />
+              <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
+                {pathResult.path.map((file, i) => (
+                  <span key={i} className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded"
+                      style={{
+                        color: i === 0 ? '#22c55e' : i === pathResult.path.length - 1 ? '#ef4444' : '#facc15',
+                        background: i === 0 ? 'rgba(34, 197, 94, 0.1)' : i === pathResult.path.length - 1 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(250, 204, 21, 0.08)',
+                        border: `1px solid ${i === 0 ? 'rgba(34, 197, 94, 0.2)' : i === pathResult.path.length - 1 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(250, 204, 21, 0.15)'}`,
+                      }}>
+                      {file}
+                    </span>
+                    {i < pathResult.path.length - 1 && <ArrowRight size={12} style={{ color: 'var(--cni-muted)', flexShrink: 0 }} />}
+                  </span>
+                ))}
+              </div>
+              <span className="text-xs flex-shrink-0 px-2 py-0.5 rounded-lg font-medium" style={{
+                color: '#facc15', background: 'rgba(250, 204, 21, 0.1)',
+                border: '1px solid rgba(250, 204, 21, 0.15)',
+              }}>{pathResult.length} hop{pathResult.length !== 1 ? 's' : ''}</span>
+              <button onClick={handleSwapPath} title="Swap source ↔ target"
+                className="p-1 rounded-lg transition-all duration-200"
+                style={{ color: 'var(--cni-muted)', border: '1px solid var(--cni-border)' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#facc15'; e.currentTarget.style.borderColor = 'rgba(250, 204, 21, 0.3)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--cni-muted)'; e.currentTarget.style.borderColor = 'var(--cni-border)'; }}>
+                <RefreshCw size={13} />
+              </button>
+              <button onClick={clearPath}
+                className="text-xs px-2 py-1 rounded-lg transition-colors"
+                style={{ color: 'var(--cni-muted)', border: '1px solid var(--cni-border)' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}>
+                Clear
+              </button>
+            </>
+          ) : (
+            <>
+              <Route size={14} style={{ color: 'var(--cni-muted)', flexShrink: 0 }} />
+              <span className="text-xs" style={{ color: 'var(--cni-muted)' }}>
+                No path found between {pathSource?.label} and {pathTarget?.label}
+              </span>
+              <button onClick={clearPath}
+                className="text-xs px-2 py-1 rounded-lg transition-colors ml-auto"
+                style={{ color: 'var(--cni-muted)', border: '1px solid var(--cni-border)' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}>
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ══════ Graph + Panel + Chat row ══════ */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
         {/* Graph area */}
@@ -723,12 +1012,12 @@ export default function GraphPage() {
                 ctx.fillStyle = color; ctx.fill();
               }}
               linkColor={getLinkColor}
-              linkWidth={(link) => highlightLinks.has(link) ? 1.5 : 0.5}
+              linkWidth={getLinkWidth}
               linkCurvature={0.15}
               linkDirectionalParticles={2}
-              linkDirectionalParticleWidth={2}
-              linkDirectionalParticleColor={() => '#22d3ee'}
-              linkDirectionalParticleSpeed={0.004}
+              linkDirectionalParticleWidth={getLinkParticleWidth}
+              linkDirectionalParticleColor={() => pathEdgeSet ? '#facc15' : '#22d3ee'}
+              linkDirectionalParticleSpeed={getLinkParticleSpeed}
               onNodeClick={handleNodeClick}
               onNodeHover={handleNodeHover}
               onBackgroundClick={handleBgClick}

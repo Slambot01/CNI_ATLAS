@@ -384,3 +384,26 @@ export async function semanticSearch(query, path, topN = 10) {
     return parseError(err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Dependency Path Finder
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/path — Find shortest dependency path between two files.
+ * @param {string} source — source filename or path
+ * @param {string} target — target filename or path
+ * @param {string} path — repo path
+ * @returns {Promise<{found: boolean, path: string[], full_path?: string[], length: number}>}
+ */
+export async function findPath(source, target, path) {
+  try {
+    const { data } = await API.post('/api/path', { source, target, path });
+    if (data?.error && data?.hint) {
+      return { error: true, message: data.error, hint: data.hint };
+    }
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}
