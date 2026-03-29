@@ -20,10 +20,25 @@ function LayoutShell({ children }) {
   return (
     <>
       <Sidebar repoPath={ctx.repoPath} isAnalyzed={ctx.isAnalyzed} />
-      {/* Top bar */}
-      <header className="fixed top-0 left-16 right-0 h-14 flex items-center gap-3 px-5 z-30"
-        style={{ background: 'rgba(6, 10, 19, 0.85)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--cni-border)' }}>
-        <span className="text-sm font-bold mr-2" style={{ background: 'linear-gradient(135deg, #3b82f6, #22d3ee)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+      {/* Top bar — uses CSS var for sidebar-aware left offset */}
+      <header
+        className="fixed top-0 right-0 h-14 flex items-center gap-3 px-5 z-30"
+        style={{
+          left: 'var(--sidebar-width, 64px)',
+          background: 'rgba(9, 9, 11, 0.85)',
+          backdropFilter: 'blur(16px)',
+          borderBottom: '1px solid var(--border-default)',
+          transition: 'left 0.25s ease',
+        }}
+      >
+        <span
+          className="text-sm font-bold mr-2"
+          style={{
+            background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
           CNI
         </span>
         <input
@@ -32,7 +47,9 @@ function LayoutShell({ children }) {
           className="input-field flex-1 h-9 text-sm"
           value={ctx.repoPath}
           onChange={(e) => ctx.setRepoPath(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && ctx.repoPath.trim()) ctx.analyze(ctx.repoPath.trim()); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && ctx.repoPath.trim()) ctx.analyze(ctx.repoPath.trim());
+          }}
         />
         <button
           className="btn-primary h-9 px-5 text-sm disabled:opacity-50"
@@ -44,23 +61,43 @@ function LayoutShell({ children }) {
               <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               Analyzing…
             </span>
-          ) : 'Analyze'}
+          ) : (
+            'Analyze'
+          )}
         </button>
       </header>
 
-      {/* Main content */}
-      <main className="ml-16 mt-14 mb-9 min-h-[calc(100vh-5.75rem)]">
+      {/* Main content — uses CSS var for sidebar-aware left margin */}
+      <main
+        className="mt-14 mb-9 min-h-[calc(100vh-5.75rem)]"
+        style={{
+          marginLeft: 'var(--sidebar-width, 64px)',
+          transition: 'margin-left 0.25s ease',
+        }}
+      >
         {/* Auto-recovery indicator */}
         {ctx.recovering && (
-          <div className="mx-5 mt-4 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2.5 animate-fade-in"
-            style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+          <div
+            className="mx-5 mt-4 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2.5 animate-fade-in"
+            style={{
+              background: 'var(--info-muted)',
+              border: '1px solid rgba(59, 130, 246, 0.15)',
+              color: '#60a5fa',
+            }}
+          >
             <span className="w-3 h-3 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
             Re-connecting to server…
           </div>
         )}
         {ctx.error && (
-          <div className="mx-5 mt-4 px-4 py-3 rounded-xl text-sm animate-fade-in"
-            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171' }}>
+          <div
+            className="mx-5 mt-4 px-4 py-3 rounded-xl text-sm animate-fade-in"
+            style={{
+              background: 'var(--danger-muted)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              color: '#f87171',
+            }}
+          >
             {ctx.error.message || ctx.error}
           </div>
         )}

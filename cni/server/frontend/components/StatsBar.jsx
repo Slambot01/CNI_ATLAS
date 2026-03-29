@@ -14,8 +14,8 @@ export default function StatsBar({ stats, healthData }) {
   ];
 
   return (
-    <footer className="fixed bottom-0 left-16 right-0 h-9 flex items-center justify-between px-5 z-30 text-xs"
-      style={{ background: 'rgba(6, 10, 19, 0.9)', backdropFilter: 'blur(12px)', borderTop: '1px solid var(--cni-border)' }}>
+    <footer className="fixed bottom-0 right-0 h-9 flex items-center justify-between px-5 z-30 text-xs"
+      style={{ left: 'var(--sidebar-width, 64px)', background: 'rgba(9, 9, 11, 0.9)', backdropFilter: 'blur(12px)', borderTop: '1px solid var(--border-default)', transition: 'left 0.25s ease' }}>
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-1.5">
           <div className={`w-1.5 h-1.5 rounded-full ${stats ? 'animate-pulse-slow' : ''}`}

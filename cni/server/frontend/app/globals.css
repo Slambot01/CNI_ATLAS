@@ -4,62 +4,166 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ------------------------------------------------------------------ */
-/* Base layer                                                         */
-/* ------------------------------------------------------------------ */
-@layer base {
-  :root {
-    --cni-bg: #060a13;
-    --cni-surface: #0c1220;
-    --cni-surface-2: #111827;
-    --cni-border: #1a2235;
-    --cni-border-light: #243044;
-    --cni-accent: #3b82f6;
-    --cni-accent-cyan: #22d3ee;
-    --cni-text: #e2e8f0;
-    --cni-muted: #64748b;
-    --cni-sidebar-bg: #080d18;
-  }
+/* ================================================================== */
+/*  CNI Design System — CSS Custom Properties                         */
+/* ================================================================== */
+:root {
+  /* ── Backgrounds ─────────────────────────────────────────────────── */
+  --bg-root:        #09090b;
+  --bg-surface:     #0f0f12;
+  --bg-card:        #141418;
+  --bg-card-hover:  #1a1a1f;
+  --bg-elevated:    #1e1e24;
+  --bg-input:       #0c0c0f;
 
+  /* ── Accent (green) ──────────────────────────────────────────────── */
+  --accent:         #22c55e;
+  --accent-hover:   #16a34a;
+  --accent-muted:   rgba(34, 197, 94, 0.12);
+  --accent-border:  rgba(34, 197, 94, 0.25);
+
+  /* ── Semantic Colors ─────────────────────────────────────────────── */
+  --warning:        #eab308;
+  --warning-muted:  rgba(234, 179, 8, 0.12);
+  --danger:         #ef4444;
+  --danger-muted:   rgba(239, 68, 68, 0.12);
+  --info:           #3b82f6;
+  --info-muted:     rgba(59, 130, 246, 0.12);
+
+  /* ── Text ────────────────────────────────────────────────────────── */
+  --text-primary:   rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-muted:     rgba(255, 255, 255, 0.32);
+
+  /* ── Borders ─────────────────────────────────────────────────────── */
+  --border-default: rgba(255, 255, 255, 0.06);
+  --border-hover:   rgba(255, 255, 255, 0.12);
+
+  /* ── Typography ──────────────────────────────────────────────────── */
+  --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  /* ── Sidebar ─────────────────────────────────────────────────────── */
+  --sidebar-width: 64px;
+
+  /* ══════════════════════════════════════════════════════════════════ */
+  /*  BACKWARD-COMPATIBLE ALIASES  (used by existing components)      */
+  /* ══════════════════════════════════════════════════════════════════ */
+  --cni-bg:          var(--bg-root);
+  --cni-surface:     var(--bg-card);
+  --cni-surface-2:   var(--bg-elevated);
+  --cni-border:      var(--border-default);
+  --cni-border-light: var(--border-hover);
+  --cni-accent:      var(--accent);
+  --cni-accent-cyan: #22d3ee;
+  --cni-text:        var(--text-primary);
+  --cni-muted:       var(--text-secondary);
+  --cni-sidebar-bg:  var(--bg-surface);
+}
+
+/* ================================================================== */
+/*  Base Layer                                                         */
+/* ================================================================== */
+@layer base {
   html {
     @apply antialiased;
     color-scheme: dark;
   }
 
   body {
-    background: var(--cni-bg);
-    color: var(--cni-text);
-    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg-root);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    line-height: 1.6;
   }
 
-  /* Custom scrollbar */
-  ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--cni-border); border-radius: 999px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--cni-muted); }
+  /* ── Scrollbar ───────────────────────────────────────────────────── */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  }
+
+  /* ── Selection ───────────────────────────────────────────────────── */
+  ::selection {
+    background: rgba(34, 197, 94, 0.3);
+    color: #fff;
+  }
+  ::-moz-selection {
+    background: rgba(34, 197, 94, 0.3);
+    color: #fff;
+  }
 }
 
-/* ------------------------------------------------------------------ */
-/* Components                                                         */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  Typography Utilities                                                */
+/* ================================================================== */
+.text-stat {
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.text-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.text-body {
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ================================================================== */
+/*  Component Layer                                                    */
+/* ================================================================== */
 @layer components {
+  /* ── Cards ─────────────────────────────────────────────────────── */
   .glass-card {
-    background: rgba(12, 18, 32, 0.7);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--cni-border);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
     border-radius: 16px;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .glass-card:hover {
+    border-color: var(--border-hover);
   }
 
   .glass-card-solid {
-    background: var(--cni-surface);
-    border: 1px solid var(--cni-border);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
     border-radius: 16px;
   }
 
+  /* ── Glow Effects ──────────────────────────────────────────────── */
   .glow-accent {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.1),
-                0 0 60px rgba(59, 130, 246, 0.04);
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.1),
+                0 0 60px rgba(34, 197, 94, 0.04);
   }
 
   .glow-cyan {
@@ -67,28 +171,30 @@
                 0 0 60px rgba(34, 211, 238, 0.04);
   }
 
+  /* ── Buttons ───────────────────────────────────────────────────── */
   .btn-primary {
     @apply px-5 py-2.5 text-sm font-medium rounded-xl
            transition-all duration-200 ease-out active:scale-[0.97];
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
     color: white;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    box-shadow: 0 2px 12px rgba(59, 130, 246, 0.2);
+    border: 1px solid var(--accent-border);
+    box-shadow: 0 2px 12px rgba(34, 197, 94, 0.2);
   }
   .btn-primary:hover {
-    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.35);
-    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 4px 20px rgba(34, 197, 94, 0.35);
+    border-color: rgba(34, 197, 94, 0.5);
   }
 
   .btn-ghost {
     @apply px-3 py-2 text-sm rounded-xl transition-all duration-200;
-    color: var(--cni-muted);
+    color: var(--text-secondary);
   }
   .btn-ghost:hover {
-    color: var(--cni-text);
+    color: var(--text-primary);
     background: rgba(255, 255, 255, 0.04);
   }
 
+  /* ── Badges ────────────────────────────────────────────────────── */
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5
            text-xs font-semibold rounded-full;
@@ -96,68 +202,85 @@
 
   .badge-danger {
     @apply badge;
-    background: rgba(239, 68, 68, 0.15);
+    background: var(--danger-muted);
     color: #f87171;
     border: 1px solid rgba(239, 68, 68, 0.2);
   }
 
   .badge-warning {
     @apply badge;
-    background: rgba(234, 179, 8, 0.12);
+    background: var(--warning-muted);
     color: #fbbf24;
     border: 1px solid rgba(234, 179, 8, 0.2);
   }
 
   .badge-success {
     @apply badge;
-    background: rgba(34, 197, 94, 0.12);
+    background: var(--accent-muted);
     color: #4ade80;
-    border: 1px solid rgba(34, 197, 94, 0.2);
+    border: 1px solid var(--accent-border);
   }
 
   .badge-info {
     @apply badge;
-    background: rgba(59, 130, 246, 0.12);
+    background: var(--info-muted);
     color: #60a5fa;
     border: 1px solid rgba(59, 130, 246, 0.2);
   }
 
+  /* ── Inputs ────────────────────────────────────────────────────── */
   .input-field {
     @apply w-full px-4 py-2.5 text-sm rounded-xl transition-all duration-200;
-    background: var(--cni-bg);
-    border: 1px solid var(--cni-border);
-    color: var(--cni-text);
+    background: var(--bg-input);
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
   }
-  .input-field::placeholder { color: var(--cni-muted); }
+  .input-field::placeholder {
+    color: var(--text-muted);
+  }
   .input-field:focus {
     outline: none;
-    border-color: var(--cni-accent);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-muted);
   }
 
+  /* ── Stat Card ─────────────────────────────────────────────────── */
   .stat-card {
     @apply glass-card p-5 flex flex-col gap-1;
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Animations                                                         */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  Animation Keyframes                                                */
+/* ================================================================== */
 @keyframes fadeIn {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+
 @keyframes slideInRight {
   from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
-.animate-fade-in { animation: fadeIn 0.25s ease-out; }
-.animate-slide-up { animation: slideUp 0.3s ease-out; }
-.animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
-.animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.7; }
+}
+
+/* ── Animation Utilities ─────────────────────────────────────────── */
+.animate-fade-in        { animation: fadeIn 0.25s ease-out; }
+.animate-slide-up       { animation: slideInUp 0.3s ease-out; }
+.animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
+.animate-pulse-slow     { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.animate-pulse-subtle   { animation: pulse-subtle 2s ease-in-out infinite; }

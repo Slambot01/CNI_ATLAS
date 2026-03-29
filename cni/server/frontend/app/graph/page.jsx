@@ -36,14 +36,13 @@ function getFolderFromId(id) {
 }
 
 // ─── Constants for layout math ───
-const SIDEBAR_W = 64;
 const HEADER_H = 56;
-const FILTER_H = 42;
+const FILTER_H = 48;
 const PATH_PANEL_H = 52;
 const STATUS_H = 36;
-const PANEL_W = 320;
-const CHAT_OPEN_W = 350;
-const CHAT_CLOSED_W = 40;
+const PANEL_W = 300;
+const CHAT_OPEN_W = 340;
+const CHAT_CLOSED_W = 44;
 
 export default function GraphPage() {
   const ForceGraph2D = useForceGraph();
@@ -60,8 +59,9 @@ export default function GraphPage() {
   const [graphH, setGraphH] = useState(600);
 
   const updateSize = useCallback((panelOpen, isChatOpen, hasPathPanel) => {
+    const sidebarW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 64;
     const chatW = isChatOpen ? CHAT_OPEN_W : CHAT_CLOSED_W;
-    const w = window.innerWidth - SIDEBAR_W - (panelOpen ? PANEL_W : 0) - chatW;
+    const w = window.innerWidth - sidebarW - (panelOpen ? PANEL_W : 0) - chatW;
     const extraH = hasPathPanel ? PATH_PANEL_H : 0;
     const h = window.innerHeight - HEADER_H - FILTER_H - STATUS_H - extraH;
     setGraphW(Math.max(w, 100));
@@ -766,32 +766,36 @@ export default function GraphPage() {
   return (
     <div className="graph-page-root" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 5.75rem)', overflow: 'hidden' }}>
       {/* ══════ Filter bar ══════ */}
-      <div className="flex items-center gap-3 px-4 py-2" style={{ flexShrink: 0, borderBottom: '1px solid var(--cni-border)', background: 'var(--cni-surface)' }}>
+      <div className="flex items-center gap-2.5 px-4" style={{ flexShrink: 0, height: 48, borderBottom: '1px solid var(--border-default)', background: 'var(--bg-surface)' }}>
         {[
           { label: 'Hide tests', value: hideTests, set: setHideTests },
           { label: 'Hide isolated', value: hideIsolated, set: setHideIsolated },
           { label: 'Hide __init__', value: hideInit, set: setHideInit },
         ].map(({ label, value, set }) => (
           <button key={label} onClick={() => set(!value)}
-            className="px-3 py-1 text-xs rounded-lg transition-all duration-200"
+            className="text-xs font-medium transition-all duration-200"
             style={{
-              background: value ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
-              border: `1px solid ${value ? 'rgba(59, 130, 246, 0.25)' : 'var(--cni-border)'}`,
-              color: value ? '#60a5fa' : 'var(--cni-muted)',
-            }}>
+              padding: '6px 14px',
+              borderRadius: 9999,
+              background: value ? 'var(--accent-muted)' : 'transparent',
+              border: `1px solid ${value ? 'var(--accent-border)' : 'var(--border-default)'}`,
+              color: value ? 'var(--accent)' : 'var(--text-muted)',
+            }}
+            onMouseEnter={e => { if (!value) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+            onMouseLeave={e => { if (!value) e.currentTarget.style.background = 'transparent'; }}>
             {label}
           </button>
         ))}
 
-        <div className="flex items-center gap-2 ml-2">
-          <span className="text-xs" style={{ color: 'var(--cni-muted)' }}>Min conn:</span>
+        <div className="flex items-center gap-2 ml-1">
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Min:</span>
           <input type="range" min="0" max="10" value={minConn} onChange={(e) => setMinConn(parseInt(e.target.value))}
-            className="w-20 h-1 rounded-full appearance-none cursor-pointer" style={{ background: 'var(--cni-border)' }} />
-          <span className="text-xs w-4" style={{ color: '#60a5fa' }}>{minConn}</span>
+            className="w-16 h-1 rounded-full appearance-none cursor-pointer" style={{ background: 'var(--border-default)' }} />
+          <span className="text-xs font-bold w-4" style={{ color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{minConn}</span>
         </div>
 
         <select value={colorMode} onChange={(e) => setColorMode(e.target.value)}
-          className="px-2 py-1 text-xs rounded-lg ml-2" style={{ background: 'var(--cni-bg)', border: '1px solid var(--cni-border)', color: 'var(--cni-text)' }}>
+          className="text-xs font-medium" style={{ padding: '6px 14px', borderRadius: 9999, background: 'var(--bg-input)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
           <option value="folder">Color: Folder</option>
           <option value="importance">Color: Importance</option>
           <option value="default">Color: Default</option>
@@ -801,12 +805,16 @@ export default function GraphPage() {
         <button
           onClick={togglePathMode}
           title={pathMode ? 'Exit Path Finder' : 'Find Dependency Path'}
-          className="px-3 py-1 text-xs rounded-lg transition-all duration-200 flex items-center gap-1.5"
+          className="text-xs font-medium transition-all duration-200 flex items-center gap-1.5"
           style={{
-            background: pathMode ? 'rgba(250, 204, 21, 0.12)' : 'transparent',
-            border: `1px solid ${pathMode ? 'rgba(250, 204, 21, 0.3)' : 'var(--cni-border)'}`,
-            color: pathMode ? '#facc15' : 'var(--cni-muted)',
+            padding: '6px 14px',
+            borderRadius: 9999,
+            background: pathMode ? 'var(--accent-muted)' : 'transparent',
+            border: `1px solid ${pathMode ? 'var(--accent-border)' : 'var(--border-default)'}`,
+            color: pathMode ? 'var(--accent)' : 'var(--text-muted)',
           }}
+          onMouseEnter={e => { if (!pathMode) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+          onMouseLeave={e => { if (!pathMode) e.currentTarget.style.background = 'transparent'; }}
         >
           <Route size={13} />
           Path Finder
@@ -829,11 +837,12 @@ export default function GraphPage() {
           <button
             onClick={toggleSearchMode}
             title={searchMode === 'file' ? 'Switch to Smart Search' : 'Switch to File Search'}
-            className="w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200"
+            className="flex items-center justify-center transition-all duration-200"
             style={{
-              background: searchMode === 'smart' ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
-              border: `1px solid ${searchMode === 'smart' ? 'rgba(168, 85, 247, 0.3)' : 'var(--cni-border)'}`,
-              color: searchMode === 'smart' ? '#a855f7' : 'var(--cni-muted)',
+              width: 30, height: 30, borderRadius: 9999,
+              background: searchMode === 'smart' ? 'var(--accent-muted)' : 'transparent',
+              border: `1px solid ${searchMode === 'smart' ? 'var(--accent-border)' : 'var(--border-default)'}`,
+              color: searchMode === 'smart' ? 'var(--accent)' : 'var(--text-muted)',
             }}
           >
             {searchMode === 'smart' ? <Sparkles size={14} /> : <Search size={14} />}
@@ -847,14 +856,18 @@ export default function GraphPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              className="pl-3 pr-8 py-1 text-xs rounded-lg transition-all duration-200"
+              className="text-sm transition-all duration-200"
               style={{
-                width: searchMode === 'smart' ? 260 : 192,
-                background: 'var(--cni-bg)',
-                border: `1px solid ${searchMode === 'smart' ? 'rgba(168, 85, 247, 0.25)' : 'var(--cni-border)'}`,
-                color: 'var(--cni-text)',
-                boxShadow: searchMode === 'smart' ? '0 0 12px rgba(168, 85, 247, 0.06)' : 'none',
+                width: 260,
+                padding: '8px 32px 8px 12px',
+                borderRadius: 8,
+                background: 'var(--bg-input)',
+                border: `1px solid ${searchMode === 'smart' ? 'var(--accent-border)' : 'var(--border-default)'}`,
+                color: 'var(--text-primary)',
+                outline: 'none',
               }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-muted)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = searchMode === 'smart' ? 'var(--accent-border)' : 'var(--border-default)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
             {/* Right icon in input */}
             <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -875,16 +888,16 @@ export default function GraphPage() {
 
             {/* File search autocomplete dropdown */}
             {searchMode === 'file' && searchResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-50 max-h-48 overflow-y-auto"
-                style={{ background: 'var(--cni-surface)', border: '1px solid var(--cni-border)' }}>
+              <div className="absolute top-full left-0 right-0 mt-1 overflow-hidden z-50 max-h-48 overflow-y-auto"
+                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
                 {searchResults.map(n => (
                   <button key={n.id} onClick={() => handleSearchSelect(n)}
-                    className="w-full px-3 py-2 text-left text-xs font-mono flex items-center justify-between transition-colors"
-                    style={{ color: 'var(--cni-text)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.1)'}
+                    className="w-full px-3 py-2 text-left text-xs flex items-center justify-between transition-colors"
+                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <span>{n.label}</span>
-                    <span style={{ color: 'var(--cni-muted)' }}>in:{n.indegree}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>in:{n.indegree}</span>
                   </button>
                 ))}
               </div>
@@ -892,17 +905,17 @@ export default function GraphPage() {
 
             {/* Smart search results panel */}
             {searchMode === 'smart' && smartSearchResults && smartSearchResults.length > 0 && (
-              <div className="absolute top-full left-0 mt-1 rounded-xl overflow-hidden z-50 animate-fade-in"
+              <div className="absolute top-full left-0 mt-1 overflow-hidden z-50 animate-fade-in"
                 style={{
-                  background: 'rgba(12, 18, 32, 0.95)',
-                  border: '1px solid rgba(168, 85, 247, 0.2)',
-                  backdropFilter: 'blur(16px)',
-                  minWidth: 280,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 8,
+                  minWidth: 300,
                   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
                 }}>
-                <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <Sparkles size={12} style={{ color: '#a855f7' }} />
-                  <span className="text-[11px] font-medium" style={{ color: 'var(--cni-text)' }}>
+                <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-default)' }}>
+                  <Sparkles size={12} style={{ color: 'var(--accent)' }} />
+                  <span className="text-[11px] font-medium" style={{ color: 'var(--text-primary)' }}>
                     {smartSearchResults.length} results for "{smartSearchQuery}"
                   </span>
                 </div>
@@ -912,27 +925,28 @@ export default function GraphPage() {
                       key={r.path || i}
                       onClick={() => handleSmartResultClick(r)}
                       className="w-full px-3 py-2 text-left flex items-center justify-between transition-colors"
-                      style={{ color: 'var(--cni-text)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(168, 85, 247, 0.08)'}
+                      style={{ color: 'var(--text-primary)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <span className="text-xs font-mono truncate mr-3">{r.file}</span>
+                      <span className="text-xs truncate mr-3" style={{ fontFamily: 'var(--font-mono)' }}>{r.file}</span>
                       <span className="text-[10px] font-bold flex-shrink-0 px-1.5 py-0.5 rounded"
                         style={{
-                          color: r.score > 0.8 ? '#a855f7' : r.score > 0.5 ? '#60a5fa' : 'var(--cni-muted)',
-                          background: r.score > 0.8 ? 'rgba(168, 85, 247, 0.12)' : r.score > 0.5 ? 'rgba(96, 165, 250, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                          fontVariantNumeric: 'tabular-nums',
+                          color: r.score > 0.8 ? 'var(--accent)' : r.score > 0.5 ? '#3b82f6' : 'var(--text-muted)',
+                          background: r.score > 0.8 ? 'var(--accent-muted)' : r.score > 0.5 ? 'var(--info-muted)' : 'rgba(255,255,255,0.04)',
                         }}>
                         {Math.round(r.score * 100)}%
                       </span>
                     </button>
                   ))}
                 </div>
-                <div className="px-3 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="px-3 py-2" style={{ borderTop: '1px solid var(--border-default)' }}>
                   <button onClick={clearSmartSearch}
                     className="text-[11px] transition-colors"
-                    style={{ color: 'var(--cni-muted)' }}
-                    onMouseEnter={e => e.currentTarget.style.color = '#f87171'}
-                    onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}>
+                    style={{ color: 'var(--text-muted)' }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
                     Clear Search
                   </button>
                 </div>
@@ -941,34 +955,36 @@ export default function GraphPage() {
 
             {/* Smart search — no results */}
             {searchMode === 'smart' && smartSearchResults && smartSearchResults.length === 0 && !smartSearchLoading && (
-              <div className="absolute top-full left-0 mt-1 rounded-xl z-50 px-3 py-3 animate-fade-in"
+              <div className="absolute top-full left-0 mt-1 z-50 px-3 py-3 animate-fade-in"
                 style={{
-                  background: 'rgba(12, 18, 32, 0.95)',
-                  border: '1px solid var(--cni-border)',
-                  backdropFilter: 'blur(12px)',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 8,
                   minWidth: 220,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                 }}>
-                <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>No results found</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No results found</p>
               </div>
             )}
           </div>
         </div>
 
-        <span className="text-xs ml-3 flex-shrink-0" style={{ color: 'var(--cni-muted)' }}>
+        <span className="text-xs ml-3 flex-shrink-0" style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
           {filteredData.nodes.length} nodes · {filteredData.links.length} edges
         </span>
 
         <button
           onClick={() => exportGraphData(filteredData.nodes, filteredData.links, repoPath)}
           title="Export graph data as JSON"
-          className="px-2.5 py-1 text-xs rounded-lg transition-all duration-200 flex items-center gap-1.5 flex-shrink-0"
+          className="text-xs font-medium transition-all duration-200 flex items-center gap-1.5 flex-shrink-0"
           style={{
+            padding: '6px 14px', borderRadius: 9999,
             background: 'transparent',
-            border: '1px solid var(--cni-border)',
-            color: 'var(--cni-muted)',
+            border: '1px solid var(--border-default)',
+            color: 'var(--text-muted)',
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.3)'; e.currentTarget.style.color = '#60a5fa'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
         >
           <Download size={13} /> Export
         </button>
@@ -976,9 +992,9 @@ export default function GraphPage() {
 
       {/* ══════ Path Result Panel ══════ */}
       {pathMode && (pathResult !== null || pathLoading) && (
-        <div className="flex items-center gap-3 px-4 py-2 animate-fade-in" style={{
-          flexShrink: 0, borderBottom: '1px solid var(--cni-border)',
-          background: 'rgba(250, 204, 21, 0.03)',
+        <div className="flex items-center gap-3 px-4 animate-fade-in" style={{
+          flexShrink: 0, padding: '12px 16px', borderBottom: '1px solid var(--border-default)',
+          background: 'var(--bg-card)', borderRadius: 0,
         }}>
           {pathLoading ? (
             <div className="flex items-center gap-2">
@@ -1044,9 +1060,9 @@ export default function GraphPage() {
       {/* ══════ Graph + Panel + Chat row ══════ */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
         {/* Graph area */}
-        <div style={{ position: 'relative', flex: 1, minWidth: 0, height: graphH, background: '#060a13', transition: 'width 300ms ease' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0, height: graphH, background: 'var(--bg-root)', transition: 'width 300ms ease' }}>
           {loading && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, background: 'rgba(6,10,19,0.85)' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, background: 'rgba(9,9,11,0.85)' }}>
               <div className="text-center space-y-3">
                 <div className="w-8 h-8 mx-auto border-2 rounded-full animate-spin" style={{ borderColor: 'var(--cni-border)', borderTopColor: 'var(--cni-accent)' }} />
                 <p className="text-sm" style={{ color: 'var(--cni-muted)' }}>Building graph…</p>
@@ -1072,7 +1088,7 @@ export default function GraphPage() {
               graphData={filteredData}
               width={graphW}
               height={graphH}
-              backgroundColor="#060a13"
+              backgroundColor="#09090b"
               nodeCanvasObject={paintNode}
               nodePointerAreaPaint={(node, color, ctx) => {
                 const r = Math.max(3, Math.min(14, 2 + (node.indegree || 0) * 0.9)) + 5;
@@ -1123,9 +1139,9 @@ export default function GraphPage() {
 
           {/* Hover tooltip */}
           {hoverNode && (
-            <div style={{ position: 'absolute', left: 16, bottom: 16, background: 'rgba(12,18,32,0.92)', border: '1px solid var(--cni-border)', backdropFilter: 'blur(8px)', borderRadius: 12, padding: '8px 12px', zIndex: 20, pointerEvents: 'none' }}
+            <div style={{ position: 'absolute', left: 16, bottom: 16, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', backdropFilter: 'blur(8px)', borderRadius: 10, padding: '10px 14px', zIndex: 20, pointerEvents: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}
               className="animate-fade-in">
-              <p className="font-mono font-semibold text-xs" style={{ color: 'var(--cni-text)' }}>{hoverNode.label}</p>
+              <p className="font-semibold text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{hoverNode.label}</p>
               <p className="text-xs mt-0.5" style={{ color: 'var(--cni-muted)' }}>📁 {getFolderFromId(hoverNode.id)}</p>
               <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>
                 in: <span style={{ color: '#60a5fa' }}>{hoverNode.indegree}</span>{' · '}out: <span style={{ color: '#22d3ee' }}>{hoverNode.outdegree}</span>
@@ -1175,9 +1191,9 @@ export default function GraphPage() {
           {/* ══ Floating Controls ══ */}
           <div style={{
             position: 'absolute', bottom: 20, right: 20, zIndex: 50,
-            display: 'flex', flexDirection: 'column', gap: 6,
-            background: 'rgba(10,10,15,0.85)', backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12,
+            display: 'flex', flexDirection: 'column', gap: 4,
+            background: 'var(--bg-card)', backdropFilter: 'blur(12px)',
+            border: '1px solid var(--border-default)', borderRadius: 12,
             padding: 6, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
           }}>
             {[
@@ -1211,31 +1227,31 @@ export default function GraphPage() {
 
         {/* ══════ Side Panel ══════ */}
         {panelOpen && (
-          <div style={{ width: PANEL_W, flexShrink: 0, background: 'var(--cni-surface)', borderLeft: '1px solid var(--cni-border)', overflowY: 'auto' }}
+          <div style={{ width: PANEL_W, flexShrink: 0, background: 'var(--bg-card)', borderLeft: '1px solid var(--border-default)', overflowY: 'auto' }}
             className="animate-slide-in-right">
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--cni-text)' }}>Node Details</h3>
-                <button onClick={handleBgClick} className="text-lg leading-none transition-colors" style={{ color: 'var(--cni-muted)' }}
-                  onMouseEnter={e => e.currentTarget.style.color = 'var(--cni-text)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--cni-muted)'}>×</button>
+            <div style={{ padding: 20 }}>
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-lg font-semibold" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{selectedNode.label}</h3>
+                <button onClick={handleBgClick} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}>
+                  <X size={16} />
+                </button>
               </div>
               <div className="space-y-4">
-                <div>
-                  <p className="text-xs mb-1" style={{ color: 'var(--cni-muted)' }}>📄 Filename</p>
-                  <p className="text-sm font-mono font-semibold" style={{ color: 'var(--cni-text)' }}>{selectedNode.label}</p>
-                </div>
-                <div>
-                  <p className="text-xs mb-1" style={{ color: 'var(--cni-muted)' }}>📁 Path</p>
-                  <p className="text-xs font-mono break-all" style={{ color: 'var(--cni-muted)' }}>{selectedNode.id}</p>
-                </div>
-                <div className="flex gap-4">
-                  <div className="glass-card p-3 flex-1 text-center">
-                    <p className="text-xs mb-0.5" style={{ color: 'var(--cni-muted)' }}>In-degree</p>
-                    <p className="text-xl font-bold" style={{ color: '#60a5fa' }}>{selectedNode.indegree}</p>
+                <p className="text-[10px] truncate" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{selectedNode.id}</p>
+                <div className="flex gap-2">
+                  <div style={{ background: 'var(--bg-surface)', padding: '8px 12px', borderRadius: 8, flex: 1, textAlign: 'center' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>IN</p>
+                    <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: '#3b82f6' }}>{selectedNode.indegree}</p>
                   </div>
-                  <div className="glass-card p-3 flex-1 text-center">
-                    <p className="text-xs mb-0.5" style={{ color: 'var(--cni-muted)' }}>Out-degree</p>
-                    <p className="text-xl font-bold" style={{ color: '#22d3ee' }}>{selectedNode.outdegree}</p>
+                  <div style={{ background: 'var(--bg-surface)', padding: '8px 12px', borderRadius: 8, flex: 1, textAlign: 'center' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>OUT</p>
+                    <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--accent)' }}>{selectedNode.outdegree}</p>
+                  </div>
+                  <div style={{ background: 'var(--bg-surface)', padding: '8px 12px', borderRadius: 8, flex: 1, textAlign: 'center' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>TOTAL</p>
+                    <p className="text-lg font-bold" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{(selectedNode.indegree || 0) + (selectedNode.outdegree || 0)}</p>
                   </div>
                 </div>
                 {/* Show relevance score if from smart search */}
@@ -1255,44 +1271,56 @@ export default function GraphPage() {
                 ) : nodeDetails ? (
                   <>
                     <div>
-                      <p className="text-xs mb-2" style={{ color: 'var(--cni-muted)' }}>Imported by ({nodeDetails.imported_by?.length || 0})</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                      <p className="text-label mb-2">IMPORTED BY ({nodeDetails.imported_by?.length || 0})</p>
+                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
                         {nodeDetails.imported_by?.map((dep) => (
                           <button key={dep} onClick={() => handleDetailNodeClick(dep)}
-                            className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-mono transition-colors"
-                            style={{ color: 'var(--cni-text)' }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.1)'}
+                            className="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors"
+                            style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             {dep}
                           </button>
                         ))}
-                        {(!nodeDetails.imported_by || nodeDetails.imported_by.length === 0) && <span className="text-xs" style={{ color: 'var(--cni-muted)' }}>(none)</span>}
+                        {(!nodeDetails.imported_by || nodeDetails.imported_by.length === 0) && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>(none)</span>}
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs mb-2" style={{ color: 'var(--cni-muted)' }}>Imports ({nodeDetails.imports?.length || 0})</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                      <p className="text-label mb-2">IMPORTS ({nodeDetails.imports?.length || 0})</p>
+                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
                         {nodeDetails.imports?.map((imp) => (
                           <button key={imp} onClick={() => handleDetailNodeClick(imp)}
-                            className="w-full text-left px-2 py-1.5 rounded-lg text-xs font-mono transition-colors"
-                            style={{ color: 'var(--cni-text)' }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.1)'}
+                            className="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors"
+                            style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             {imp}
                           </button>
                         ))}
-                        {(!nodeDetails.imports || nodeDetails.imports.length === 0) && <span className="text-xs" style={{ color: 'var(--cni-muted)' }}>(none)</span>}
+                        {(!nodeDetails.imports || nodeDetails.imports.length === 0) && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>(none)</span>}
                       </div>
                     </div>
                   </>
                 ) : null}
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-3">
                   <a href={`/impact?file=${encodeURIComponent(selectedNode.label)}`}
-                    className="btn-primary text-xs flex-1 text-center py-2">⚡ Impact</a>
+                    className="text-xs font-medium flex-1 text-center py-2.5 rounded-lg transition-all duration-200"
+                    style={{ background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.color = '#fff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-muted)'; e.currentTarget.style.color = 'var(--accent)'; }}>
+                    ⚡ Impact
+                  </a>
+                  <a href={`/health`}
+                    className="text-xs font-medium flex-1 text-center py-2.5 rounded-lg transition-all duration-200"
+                    style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}>
+                    Explain
+                  </a>
                 </div>
 
                 {/* Bookmark toggle */}
-                <div className="pt-2" style={{ borderTop: '1px solid var(--cni-border)' }}>
+                <div className="pt-3" style={{ borderTop: '1px solid var(--border-default)' }}>
                   {isBookmarked(selectedNode.label) ? (
                     <div className="space-y-2">
                       <button
