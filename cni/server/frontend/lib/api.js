@@ -335,3 +335,25 @@ export async function deleteSession(path, page, sessionId) {
     return parseError(err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Analysis History
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/history — Fetch analysis history for timeline chart.
+ * @param {string} path — repo path
+ * @param {number} [limit=30]
+ * @returns {Promise<{history: Array}>}
+ */
+export async function getHistory(path, limit = 30) {
+  try {
+    const { data } = await API.get('/api/history', { params: { path, limit } });
+    if (data?.error && data?.hint) {
+      return { error: true, notAnalyzed: true, message: data.error, hint: data.hint };
+    }
+    return data;
+  } catch (err) {
+    return parseError(err);
+  }
+}

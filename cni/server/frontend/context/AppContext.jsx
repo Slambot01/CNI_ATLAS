@@ -30,6 +30,7 @@ export default function AppContextProvider({ children }) {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
   const [recovering, setRecovering] = useState(false);
+  const [recentRepos, setRecentRepos] = useState([]);
 
   // ── localStorage: restore on mount ──
   useEffect(() => {
@@ -52,6 +53,12 @@ export default function AppContextProvider({ children }) {
       const savedOnboardChat = localStorage.getItem('cni_onboard_chat_messages');
       if (savedOnboardChat) setOnboardChatMessages(JSON.parse(savedOnboardChat));
     } catch { /* ignore */ }
+
+    // Restore recent repos
+    try {
+      const savedRecent = localStorage.getItem('cni_recent_repos');
+      if (savedRecent) setRecentRepos(JSON.parse(savedRecent));
+    } catch { /* ignore */ }
   }, []);
 
   // ── localStorage: persist when repoPath or stats change ──
@@ -62,6 +69,27 @@ export default function AppContextProvider({ children }) {
       } catch { /* ignore */ }
     }
   }, [repoPath, stats]);
+
+  // ── localStorage: persist recent repos ──
+  useEffect(() => {
+    try {
+      localStorage.setItem('cni_recent_repos', JSON.stringify(recentRepos));
+    } catch { /* ignore */ }
+  }, [recentRepos]);
+
+  const addRecentRepo = useCallback((path, filesCount) => {
+    setRecentRepos(prev => {
+      const name = path.replace(/\\/g, '/').split('/').filter(Boolean).pop() || path;
+      const now = new Date().toISOString();
+      const filtered = prev.filter(r => r.path !== path);
+      const entry = { path, name, filesCount, lastAnalyzed: now };
+      return [entry, ...filtered].slice(0, 10);
+    });
+  }, []);
+
+  const removeRecentRepo = useCallback((path) => {
+    setRecentRepos(prev => prev.filter(r => r.path !== path));
+  }, []);
 
   // ══════════════════════════════════════════════════════════════════
   //  Graph
@@ -197,6 +225,9 @@ export default function AppContextProvider({ children }) {
       getHealth(path)
         .then((h) => { if (!h?.error) setHealthData(h); })
         .catch(() => {});
+
+      // Track in recent repos
+      addRecentRepo(path, data.files || 0);
 
       return true; // success
     } catch (err) {
@@ -655,6 +686,9 @@ export default function AppContextProvider({ children }) {
     // Analysis
     repoPath, setRepoPath, stats, loading: analysisLoading,
     error: analysisError, analyze, isAnalyzed: !!stats, recovering,
+
+    // Recent repos
+    recentRepos, addRecentRepo, removeRecentRepo,
 
     // Graph
     graphData, graphLoading, graphError, graphNotAnalyzed, fetchGraph,

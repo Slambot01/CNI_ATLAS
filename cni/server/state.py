@@ -192,15 +192,27 @@ class RepoState:
     def _persist_analysis(self, repo_path: str) -> None:
         """Save a snapshot of the current analysis to the history database.
 
-        Fail-safe: errors are logged but never propagated.
+        Computes the health score on-the-fly so it is recorded alongside
+        file and dependency counts.  Fail-safe: errors are logged but
+        never propagated.
         """
-        if self._stats is None:
+        if self._stats is None or self._graph is None:
             return
         try:
+            from cni.analysis.health import compute_health
+
+            health_score = 0.0
+            try:
+                report = compute_health(self._graph)
+                health_score = report.get("health_score", 0.0)
+            except Exception:  # noqa: BLE001
+                pass
+
             save_analysis(
                 repo_path=repo_path,
                 files_count=self._stats.get("files", 0),
                 dependencies_count=self._stats.get("dependencies", 0),
+                health_score=health_score,
             )
         except Exception:  # noqa: BLE001
             pass  # history module already logs internally

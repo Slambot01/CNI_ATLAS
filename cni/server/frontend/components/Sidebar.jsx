@@ -70,6 +70,14 @@ export default function Sidebar() {
             boxShadow: isAnalyzed ? '0 0 6px rgba(34, 197, 94, 0.5)' : 'none',
           }}
           title={isAnalyzed ? `Repo: ${repoPath}` : 'Not analyzed'} />
+        {/* Short repo name */}
+        {isAnalyzed && shortName && (
+          <span className="text-[9px] font-mono text-center leading-tight truncate w-14"
+            style={{ color: '#4ade80' }}
+            title={repoPath}>
+            📁 {shortName}
+          </span>
+        )}
         {/* Repo name tooltip */}
         {shortName && (
           <span className="absolute bottom-full mb-2 left-full ml-3 px-2.5 py-1.5 rounded-lg text-[10px] font-mono whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200"
