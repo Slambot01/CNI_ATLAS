@@ -19,6 +19,16 @@ import {
   Command,
 } from 'lucide-react';
 
+/* ─── Theme ────────────────────────────────────────────────────────── */
+const T = {
+  bg:      '#09090b',
+  surface: '#111113',
+  border:  '#1f1f23',
+  text:    '#ffffff',
+  muted:   '#71717a',
+  green:   '#22c55e',
+};
+
 /* ────────────────────────────────────────────────────────────────── */
 /*  Navigation items                                                 */
 /* ────────────────────────────────────────────────────────────────── */
@@ -54,24 +64,25 @@ function CmdKHint({ collapsed, onOpenCommandPalette }) {
     return (
       <button
         onClick={onOpenCommandPalette}
-        className="flex items-center justify-center py-2 mx-2 rounded-lg transition-colors duration-150 group relative"
-        style={{ color: '#71717a' }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.background = 'transparent'; }}
+        className="flex items-center justify-center py-2 mx-2 rounded-lg transition-all duration-150 group relative"
+        style={{ color: T.muted }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = T.text; e.currentTarget.style.background = T.border; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = T.muted; e.currentTarget.style.background = 'transparent'; }}
       >
         <Command size={14} />
-        {/* Tooltip */}
         <span
           className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
           style={{
-            background: '#1a1a1e',
-            border: '1px solid var(--border-hover)',
-            color: 'var(--text-primary)',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-            borderRadius: 8,
+            background: T.border,
+            border: `1px solid ${T.border}`,
+            color: T.text,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            borderRadius: 6,
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.75rem',
           }}
         >
-          Command palette
+          Command palette (⌘K)
         </span>
       </button>
     );
@@ -80,23 +91,21 @@ function CmdKHint({ collapsed, onOpenCommandPalette }) {
   return (
     <button
       onClick={onOpenCommandPalette}
-      className="flex items-center gap-2.5 mx-2 px-3 py-2 rounded-lg transition-colors duration-150"
-      style={{ color: '#71717a' }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.background = 'transparent'; }}
+      className="flex items-center gap-2.5 mx-2 px-3 py-2 rounded-lg transition-all duration-150"
+      style={{ color: T.muted }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = T.text; e.currentTarget.style.background = T.border; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = T.muted; e.currentTarget.style.background = 'transparent'; }}
     >
       <span style={{
         fontFamily: 'var(--font-mono)',
         fontSize: '0.7rem',
-        background: '#1f1f23',
+        background: T.border,
         borderRadius: 4,
         padding: '2px 6px',
       }}>
         {shortcut}
       </span>
-      <span style={{
-        fontSize: '0.7rem',
-      }}>
+      <span style={{ fontSize: '0.7rem' }}>
         Command palette
       </span>
     </button>
@@ -137,7 +146,6 @@ export default function Sidebar({ onOpenCommandPalette }) {
     );
   }, [collapsed]);
 
-  // Set initial CSS var on mount
   useEffect(() => {
     document.documentElement.style.setProperty(
       '--sidebar-width',
@@ -163,6 +171,17 @@ export default function Sidebar({ onOpenCommandPalette }) {
 
   const width = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
 
+  /* ── Tooltip helper ───────────────────────────────────────────── */
+  const tooltipStyle = {
+    background: T.border,
+    border: `1px solid ${T.border}`,
+    color: T.text,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    borderRadius: 6,
+    fontFamily: 'var(--font-ui)',
+    fontSize: '0.75rem',
+  };
+
   /* ────────────────────────────────────────────────────────────── */
   /*  Render                                                       */
   /* ────────────────────────────────────────────────────────────── */
@@ -171,8 +190,8 @@ export default function Sidebar({ onOpenCommandPalette }) {
       className="fixed left-0 top-0 h-screen flex flex-col z-50"
       style={{
         width,
-        background: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border-default)',
+        background: T.bg,
+        borderRight: `1px solid ${T.border}`,
         transition: 'width 0.25s ease',
         overflow: 'hidden',
       }}
@@ -184,22 +203,35 @@ export default function Sidebar({ onOpenCommandPalette }) {
         <Link href="/" className="flex items-center gap-2.5 group">
           {collapsed ? (
             <span
-              className="text-lg font-extrabold transition-transform duration-200 group-hover:scale-110"
-              style={{ color: 'var(--accent)' }}
+              className="flex items-center justify-center transition-all duration-150"
+              style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: T.border,
+                color: T.text,
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+                fontSize: '0.875rem',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(113,113,122,0.3)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = T.border; }}
             >
               C
             </span>
           ) : (
             <>
               <span
-                className="text-lg font-extrabold"
-                style={{ color: 'var(--accent)' }}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  color: T.text,
+                }}
               >
                 CNI
               </span>
               <span
-                className="text-[10px] leading-tight opacity-60"
-                style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}
+                className="text-[10px] leading-tight"
+                style={{ color: T.muted, fontFamily: 'var(--font-mono)', opacity: 0.6 }}
               >
                 Codebase<br />Neural Interface
               </span>
@@ -213,7 +245,9 @@ export default function Sidebar({ onOpenCommandPalette }) {
       {/* ═══════════════════════════════════════════════════════════ */}
       {!collapsed && (
         <div className="px-4 pt-1 pb-1.5">
-          <span className="text-label">NAVIGATION</span>
+          <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.6rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: T.muted }}>
+            NAVIGATION
+          </span>
         </div>
       )}
 
@@ -224,21 +258,21 @@ export default function Sidebar({ onOpenCommandPalette }) {
             <Link
               key={href}
               href={href}
-              className="relative flex items-center gap-2.5 transition-all duration-200 group"
+              className="relative flex items-center gap-2.5 transition-all duration-150 group"
               style={{
                 padding: collapsed ? '8px 0' : '8px 12px',
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                background: 'transparent',
-                borderRadius: 8,
+                background: isActive ? T.border : 'transparent',
+                borderRadius: isActive ? '0 8px 8px 0' : 8,
               }}
               onMouseEnter={(e) => {
-                if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                if (!isActive) e.currentTarget.style.background = T.border;
               }}
               onMouseLeave={(e) => {
                 if (!isActive) e.currentTarget.style.background = 'transparent';
               }}
             >
-              {/* Active indicator: 3px rounded green bar on left edge */}
+              {/* Active indicator: white left bar */}
               {isActive && (
                 <span
                   className="absolute"
@@ -246,26 +280,25 @@ export default function Sidebar({ onOpenCommandPalette }) {
                     left: collapsed ? -2 : 0,
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    width: 3,
+                    width: 2,
                     height: 20,
-                    borderRadius: 3,
-                    background: 'var(--accent)',
-                    boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
+                    borderRadius: 2,
+                    background: T.text,
                   }}
                 />
               )}
               <Icon
                 size={18}
-                className="flex-shrink-0 transition-all duration-200"
+                className="flex-shrink-0 transition-colors duration-150"
                 style={{
-                  color: isActive ? 'var(--accent)' : 'rgba(255,255,255,0.4)',
+                  color: isActive ? T.text : T.muted,
                 }}
               />
               {!collapsed && (
                 <span
-                  className="text-sm font-medium truncate transition-colors duration-200"
+                  className="text-sm font-medium truncate transition-colors duration-150"
                   style={{
-                    color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                    color: isActive ? T.text : T.muted,
                   }}
                 >
                   {label}
@@ -276,13 +309,7 @@ export default function Sidebar({ onOpenCommandPalette }) {
               {collapsed && (
                 <span
                   className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
-                  style={{
-                    background: '#1a1a1e',
-                    border: '1px solid var(--border-hover)',
-                    color: 'var(--text-primary)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                    borderRadius: 8,
-                  }}
+                  style={tooltipStyle}
                 >
                   {label}
                 </span>
@@ -303,38 +330,33 @@ export default function Sidebar({ onOpenCommandPalette }) {
               onClick={() => setBookmarksOpen(!bookmarksOpen)}
               className="w-full flex items-center justify-between px-2 py-1.5 mb-1"
             >
-              <span className="text-label">BOOKMARKS</span>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.6rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: T.muted }}>
+                BOOKMARKS
+              </span>
               <ChevronDown
                 size={12}
                 className="transition-transform duration-200"
                 style={{
-                  color: 'var(--text-muted)',
+                  color: T.muted,
                   transform: bookmarksOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                 }}
               />
             </button>
           )}
 
-          {/* Collapsed: just star icon with count */}
+          {/* Collapsed: star icon */}
           {collapsed && (
             <button
               onClick={() => setBookmarksOpen(!bookmarksOpen)}
-              className="w-full flex items-center justify-center py-2 rounded-lg transition-colors duration-200 group relative"
-              style={{ color: '#FFD700' }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 215, 0, 0.06)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              className="w-full flex items-center justify-center py-2 rounded-lg transition-all duration-150 group relative"
+              style={{ color: T.muted }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = T.border; e.currentTarget.style.color = T.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.muted; }}
             >
-              <Star size={16} fill="#FFD700" />
-              {/* Tooltip */}
+              <Star size={16} />
               <span
                 className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
-                style={{
-                  background: '#1a1a1e',
-                  border: '1px solid var(--border-hover)',
-                  color: 'var(--text-primary)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                  borderRadius: 8,
-                }}
+                style={tooltipStyle}
               >
                 {bookmarks.length} Bookmark{bookmarks.length !== 1 ? 's' : ''}
               </span>
@@ -351,29 +373,28 @@ export default function Sidebar({ onOpenCommandPalette }) {
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs truncate text-left transition-all duration-150"
                     style={{
                       fontFamily: 'var(--font-mono)',
-                      color: 'var(--text-secondary)',
+                      color: T.muted,
                       fontSize: '0.6875rem',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 215, 0, 0.06)';
-                      e.currentTarget.style.color = '#FFD700';
+                      e.currentTarget.style.background = T.border;
+                      e.currentTarget.style.color = T.text;
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = 'var(--text-secondary)';
+                      e.currentTarget.style.color = T.muted;
                     }}
                     title={bm.note ? `${bm.file}\n📝 ${bm.note}` : bm.file}
                   >
-                    <Star size={11} className="flex-shrink-0" style={{ color: '#FFD700' }} />
+                    <Star size={11} className="flex-shrink-0" style={{ color: T.muted }} />
                     <span className="truncate">{bm.file.split(/[/\\]/).pop()}</span>
                   </button>
-                  {/* Remove on hover */}
                   <button
                     onClick={(e) => { e.stopPropagation(); removeBookmark(bm.file); }}
                     className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all duration-150"
-                    style={{ color: 'var(--text-muted)' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#f87171'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                    style={{ color: T.muted }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = T.muted}
                     title="Remove bookmark"
                   >
                     <X size={12} />
@@ -381,7 +402,7 @@ export default function Sidebar({ onOpenCommandPalette }) {
                 </div>
               ))}
               {extraCount > 0 && (
-                <p className="text-[10px] text-center py-0.5" style={{ color: 'var(--text-muted)' }}>
+                <p className="text-[10px] text-center py-0.5" style={{ color: T.muted }}>
                   +{extraCount} more
                 </p>
               )}
@@ -401,30 +422,23 @@ export default function Sidebar({ onOpenCommandPalette }) {
       <CmdKHint collapsed={collapsed} onOpenCommandPalette={onOpenCommandPalette} />
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/*  Repo Indicator                                            */}
+      {/*  Connection Status Dot                                     */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="px-3 pb-2">
         {collapsed ? (
-          /* Collapsed: green dot only */
           <div className="flex flex-col items-center gap-1.5 group relative">
             <div
-              className={`w-2.5 h-2.5 rounded-full ${isAnalyzed ? 'animate-pulse-dot' : ''}`}
+              className="w-2 h-2 rounded-full"
               style={{
-                background: isAnalyzed ? 'var(--accent)' : 'var(--text-muted)',
-                boxShadow: isAnalyzed ? '0 0 8px rgba(34, 197, 94, 0.5)' : 'none',
+                background: isAnalyzed ? T.green : T.muted,
               }}
             />
-            {/* Tooltip */}
             {shortName && (
               <span
                 className="absolute left-full ml-3 bottom-0 px-2.5 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  background: '#1a1a1e',
-                  border: '1px solid var(--border-hover)',
-                  color: 'var(--accent)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                  borderRadius: 8,
+                  ...tooltipStyle,
                 }}
               >
                 {shortName}
@@ -432,33 +446,29 @@ export default function Sidebar({ onOpenCommandPalette }) {
             )}
           </div>
         ) : (
-          /* Expanded: full repo info */
           <div
-            className="p-2.5 transition-colors duration-200"
+            className="p-2.5 transition-colors duration-150"
             style={{
-              background: 'var(--bg-card)',
-              border: '1px solid rgba(255,255,255,0.04)',
+              background: T.surface,
+              border: `1px solid ${T.border}`,
               borderRadius: 10,
             }}
           >
             <div className="flex items-center gap-2 mb-1">
-              <FolderGit2 size={14} style={{ color: 'var(--text-secondary)' }} />
+              <FolderGit2 size={14} style={{ color: T.muted }} />
               <span
                 className="text-xs font-medium truncate"
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  color: isAnalyzed ? 'var(--text-primary)' : 'var(--text-muted)',
+                  color: isAnalyzed ? T.text : T.muted,
                 }}
               >
                 {shortName || 'No repo'}
               </span>
               {isAnalyzed && (
                 <div
-                  className="w-2 h-2 rounded-full ml-auto flex-shrink-0 animate-pulse-dot"
-                  style={{
-                    background: 'var(--accent)',
-                    boxShadow: '0 0 6px rgba(34, 197, 94, 0.5)',
-                  }}
+                  className="w-2 h-2 rounded-full ml-auto flex-shrink-0"
+                  style={{ background: T.green }}
                 />
               )}
             </div>
@@ -467,7 +477,7 @@ export default function Sidebar({ onOpenCommandPalette }) {
                 className="text-[10px] truncate pl-5"
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  color: 'var(--text-muted)',
+                  color: T.muted,
                 }}
                 title={repoPath}
               >
@@ -483,35 +493,28 @@ export default function Sidebar({ onOpenCommandPalette }) {
       {/* ═══════════════════════════════════════════════════════════ */}
       <button
         onClick={toggleCollapsed}
-        className="flex items-center justify-center gap-2 py-3 transition-colors duration-200 group relative"
+        className="flex items-center justify-center gap-2 py-3 transition-all duration-150 group relative"
         style={{
-          borderTop: '1px solid var(--border-default)',
-          color: 'var(--text-muted)',
+          borderTop: `1px solid ${T.border}`,
+          color: T.muted,
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-          e.currentTarget.style.color = 'var(--text-primary)';
+          e.currentTarget.style.background = T.border;
+          e.currentTarget.style.color = T.text;
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = 'var(--text-muted)';
+          e.currentTarget.style.color = T.muted;
         }}
       >
         {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         {!collapsed && (
           <span className="text-xs font-medium">Collapse</span>
         )}
-        {/* Tooltip — collapsed only */}
         {collapsed && (
           <span
             className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
-            style={{
-              background: '#1a1a1e',
-              border: '1px solid var(--border-hover)',
-              color: 'var(--text-primary)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-              borderRadius: 8,
-            }}
+            style={tooltipStyle}
           >
             Expand sidebar
           </span>

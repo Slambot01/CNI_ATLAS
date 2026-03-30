@@ -6,10 +6,15 @@ import StatsBar from '../components/StatsBar';
 import CommandPalette from '../components/CommandPalette';
 import AppContextProvider, { useAppContext } from '../context/AppContext';
 
+const T = {
+  bg:     '#09090b',
+  border: '#1f1f23',
+  text:   '#ffffff',
+  muted:  '#71717a',
+};
+
 /**
  * Re-export useAppContext as useAnalysisContext for backward compatibility.
- * Every page/component that previously used useAnalysisContext() will
- * now read from the global AppContext — no import changes needed.
  */
 export function useAnalysisContext() {
   return useAppContext();
@@ -34,47 +39,109 @@ function LayoutShell({ children }) {
   const closePalette = useCallback(() => setCmdkOpen(false), []);
   const openPalette = useCallback(() => setCmdkOpen(true), []);
 
+  /* ── Short repo path: folder/project ───────────────────────────── */
+  const shortRepo = ctx.repoPath
+    ? ctx.repoPath.replace(/\\/g, '/').split('/').filter(Boolean).slice(-2).join('/')
+    : '';
+
   return (
     <>
       <Sidebar repoPath={ctx.repoPath} isAnalyzed={ctx.isAnalyzed} onOpenCommandPalette={openPalette} />
-      {/* Top bar — uses CSS var for sidebar-aware left offset */}
+
+      {/* ═══ Header ═══ */}
       <header
-        className="fixed top-0 right-0 h-14 flex items-center gap-3 px-5 z-30"
+        className="fixed top-0 right-0 flex items-center z-30"
         style={{
           left: 'var(--sidebar-width, 64px)',
-          background: 'rgba(7, 7, 10, 0.85)',
-          backdropFilter: 'blur(16px)',
-          borderBottom: '1px solid rgba(255,255,255,0.04)',
+          height: 48,
+          padding: '0 24px',
+          background: T.bg,
+          borderBottom: `1px solid ${T.border}`,
           transition: 'left 0.25s ease',
         }}
       >
-        <span
-          className="text-sm font-bold mr-2"
-          style={{
-            background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}
-        >
-          CNI
-        </span>
-        <input
-          type="text"
-          placeholder="Enter repository path (e.g. /path/to/project)"
-          className="input-field flex-1 h-9 text-sm"
-          value={ctx.repoPath}
-          onChange={(e) => ctx.setRepoPath(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && ctx.repoPath.trim()) ctx.analyze(ctx.repoPath.trim());
-          }}
-        />
+        {/* Left: CNI branding + repo path */}
+        <div className="flex items-center flex-1 min-w-0">
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.875rem',
+            fontWeight: 700,
+            color: T.text,
+          }}>
+            CNI
+          </span>
+
+          {shortRepo && (
+            <>
+              <span style={{ color: T.border, margin: '0 12px', fontSize: '0.875rem', userSelect: 'none' }}>│</span>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.8125rem',
+                color: T.muted,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {shortRepo}
+              </span>
+            </>
+          )}
+
+          {!shortRepo && (
+            <>
+              <span style={{ color: T.border, margin: '0 12px', fontSize: '0.875rem', userSelect: 'none' }}>│</span>
+              <input
+                type="text"
+                placeholder="Enter repository path (e.g. /path/to/project)"
+                className="flex-1 h-8 text-sm"
+                value={ctx.repoPath}
+                onChange={(e) => ctx.setRepoPath(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && ctx.repoPath.trim()) ctx.analyze(ctx.repoPath.trim());
+                }}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.8125rem',
+                  color: T.text,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                }}
+              />
+            </>
+          )}
+        </div>
+
+        {/* Right: Analyze button */}
         <button
-          className="btn-primary h-9 px-5 text-sm disabled:opacity-50"
+          className="flex items-center justify-center text-sm disabled:opacity-40"
           disabled={ctx.loading || !ctx.repoPath.trim()}
           onClick={() => ctx.analyze(ctx.repoPath.trim())}
+          style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.8125rem',
+            color: T.text,
+            background: 'transparent',
+            border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            padding: '6px 16px',
+            cursor: ctx.loading || !ctx.repoPath.trim() ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s ease',
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            if (!ctx.loading && ctx.repoPath.trim()) {
+              e.currentTarget.style.background = T.border;
+              e.currentTarget.style.borderColor = T.muted;
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.borderColor = T.border;
+          }}
         >
           {ctx.loading ? (
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2" style={{ color: T.muted }}>
               <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               Analyzing…
             </span>
@@ -84,20 +151,20 @@ function LayoutShell({ children }) {
         </button>
       </header>
 
-      {/* Main content — uses CSS var for sidebar-aware left margin */}
+      {/* ═══ Main content ═══ */}
       <main
-        className="mt-14 mb-8 min-h-[calc(100vh-5.5rem)]"
+        className="mb-8 min-h-[calc(100vh-5.5rem)]"
         style={{
+          marginTop: 48,
           marginLeft: 'var(--sidebar-width, 64px)',
           transition: 'margin-left 0.25s ease',
         }}
       >
-        {/* Auto-recovery indicator */}
         {ctx.recovering && (
           <div
             className="mx-5 mt-4 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2.5 animate-fade-in"
             style={{
-              background: 'var(--info-muted)',
+              background: 'rgba(59, 130, 246, 0.06)',
               border: '1px solid rgba(59, 130, 246, 0.15)',
               color: '#60a5fa',
             }}
@@ -110,7 +177,7 @@ function LayoutShell({ children }) {
           <div
             className="mx-5 mt-4 px-4 py-3 rounded-xl text-sm animate-fade-in"
             style={{
-              background: 'var(--danger-muted)',
+              background: 'rgba(239, 68, 68, 0.06)',
               border: '1px solid rgba(239, 68, 68, 0.2)',
               color: '#f87171',
             }}
@@ -122,8 +189,6 @@ function LayoutShell({ children }) {
       </main>
 
       <StatsBar stats={ctx.stats} healthData={ctx.healthData} />
-
-      {/* ── Command Palette ── */}
       <CommandPalette open={cmdkOpen} onClose={closePalette} />
     </>
   );
