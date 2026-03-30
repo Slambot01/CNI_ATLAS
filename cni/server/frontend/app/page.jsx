@@ -2,120 +2,220 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { useAnalysisContext } from './client-layout';
 import { getHistory } from '../lib/api';
 import {
   FolderGit2,
-  TrendingUp,
   AlertTriangle,
   Trash2,
-  Activity,
   X,
   ChevronDown,
   ChevronUp,
+  ArrowRight,
+  CheckCircle2,
 } from 'lucide-react';
 import ErrorMessage from '../components/ErrorMessage';
 
-// Dynamic import recharts (needs browser, no SSR)
-const RechartsChart = dynamic(() => import('../components/TimelineChart'), { ssr: false });
+/* ================================================================== */
+/*  Dynamic import: Recharts (no SSR)                                  */
+/* ================================================================== */
+const AreaChart = dynamic(() => import('recharts').then(m => m.AreaChart), { ssr: false });
+const Area = dynamic(() => import('recharts').then(m => m.Area), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then(m => m.XAxis), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then(m => m.YAxis), { ssr: false });
+const CartesianGrid = dynamic(() => import('recharts').then(m => m.CartesianGrid), { ssr: false });
+const Tooltip = dynamic(() => import('recharts').then(m => m.Tooltip), { ssr: false });
+const Legend = dynamic(() => import('recharts').then(m => m.Legend), { ssr: false });
+const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
 
 /* ================================================================== */
-/*  Circular SVG Gauge                                                 */
+/*  Theme tokens                                                       */
 /* ================================================================== */
-function HealthGauge({ score, size = 150 }) {
+const T = {
+  bg: '#09090b',
+  surface: '#111113',
+  border: '#1f1f23',
+  text: '#ffffff',
+  muted: '#71717a',
+  amber: '#f59e0b',
+  green: '#22c55e',
+  red: '#ef4444',
+};
+
+/* ================================================================== */
+/*  Utility: shorten path to folder/file                               */
+/* ================================================================== */
+function shortPath(p) {
+  if (!p) return '';
+  return p.split(/[\\/]/).slice(-2).join('/');
+}
+function fileName(p) {
+  if (!p) return '';
+  return p.split(/[\\/]/).pop();
+}
+
+/* ================================================================== */
+/*  Semicircle Health Gauge (SVG arc)                                  */
+/* ================================================================== */
+function HealthGauge({ score }) {
+  const s = Math.min(Math.max(score || 0, 0), 100);
+  const color = s >= 80 ? T.green : s >= 50 ? T.amber : T.red;
+  const label = s >= 80 ? 'Healthy' : s >= 50 ? 'Needs work' : 'Critical';
+
+  // Semicircle arc
+  const cx = 60, cy = 50;
+  const r = 40;
   const strokeWidth = 6;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const progress = Math.min(Math.max(score || 0, 0), 100);
-  const dashOffset = circumference - (progress / 100) * circumference;
-
-  // Color based on score
-  const color = progress >= 70 ? '#22c55e' : progress >= 40 ? '#eab308' : '#ef4444';
-  const glowColor = progress >= 70
-    ? 'rgba(34, 197, 94, 0.3)'
-    : progress >= 40
-      ? 'rgba(234, 179, 8, 0.3)'
-      : 'rgba(239, 68, 68, 0.3)';
+  const startAngle = Math.PI;
+  const endAngle = 0;
+  const totalArc = Math.PI; // 180 degrees
+  const circumference = totalArc * r;
+  const progress = (s / 100) * circumference;
 
   const arcRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const el = arcRef.current;
-    if (!el) return;
-    // Animate from full offset to target
-    el.style.strokeDashoffset = String(circumference);
-    requestAnimationFrame(() => {
-      el.style.transition = 'stroke-dashoffset 1s ease-out';
-      el.style.strokeDashoffset = String(dashOffset);
-    });
-  }, [circumference, dashOffset]);
+    setMounted(true);
+  }, []);
+
+  // Arc path for semicircle (left to right, top half)
+  const describeArc = (cx, cy, r, startA, endA) => {
+    const x1 = cx + r * Math.cos(startA);
+    const y1 = cy - r * Math.sin(startA);
+    const x2 = cx + r * Math.cos(endA);
+    const y2 = cy - r * Math.sin(endA);
+    return `M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`;
+  };
+
+  const trackPath = describeArc(cx, cy, r, startAngle, endAngle);
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* Background circle */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <svg width={120} height={65} viewBox="0 0 120 65">
+        {/* Track */}
+        <path
+          d={trackPath}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.04)"
+          stroke={T.border}
           strokeWidth={strokeWidth}
+          strokeLinecap="round"
         />
-        {/* Progress arc */}
-        <circle
+        {/* Progress */}
+        <path
           ref={arcRef}
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
+          d={trackPath}
           fill="none"
           stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={circumference}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ filter: `drop-shadow(0 0 6px ${glowColor})` }}
+          strokeDashoffset={mounted ? circumference - progress : circumference}
+          style={{ transition: 'stroke-dashoffset 1s ease-out' }}
         />
         {/* Score number */}
         <text
-          x={size / 2}
-          y={size / 2 - 4}
+          x={cx}
+          y={cy - 4}
           textAnchor="middle"
           dominantBaseline="central"
           style={{
-            fill: color,
-            fontSize: '2rem',
+            fill: T.text,
+            fontSize: '1.75rem',
             fontWeight: 700,
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: 'var(--font-mono)',
             fontVariantNumeric: 'tabular-nums',
           }}
         >
           {score ?? '—'}
         </text>
-        {/* /100 label */}
-        <text
-          x={size / 2}
-          y={size / 2 + 22}
-          textAnchor="middle"
-          dominantBaseline="central"
-          style={{
-            fill: 'rgba(255, 255, 255, 0.32)',
-            fontSize: '0.6875rem',
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
-          / 100
-        </text>
       </svg>
+      <span style={{
+        fontFamily: 'var(--font-ui)',
+        fontSize: '0.65rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
+        color: T.muted,
+        marginTop: 2,
+      }}>
+        {label}
+      </span>
     </div>
   );
+}
+
+/* ================================================================== */
+/*  Chart tooltip                                                      */
+/* ================================================================== */
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: T.surface,
+      border: `1px solid ${T.border}`,
+      borderRadius: 8,
+      padding: '10px 14px',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '0.75rem',
+    }}>
+      <p style={{ color: T.muted, marginBottom: 6, fontFamily: 'var(--font-mono)' }}>{label}</p>
+      {payload.map(e => (
+        <div key={e.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: e.color, flexShrink: 0,
+          }} />
+          <span style={{ color: T.muted }}>{e.name}:</span>
+          <span style={{ color: T.text, fontWeight: 600 }}>{e.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ================================================================== */
+/*  Chart legend                                                       */
+/* ================================================================== */
+function ChartLegend({ payload }) {
+  if (!payload?.length) return null;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginBottom: 8 }}>
+      {payload.map(e => (
+        <div key={e.value} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: e.color,
+          }} />
+          <span style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.7rem',
+            color: T.muted,
+          }}>
+            {e.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ================================================================== */
+/*  Format date for chart axis                                         */
+/* ================================================================== */
+function formatDate(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch { return ts; }
 }
 
 /* ================================================================== */
 /*  Dashboard Page                                                     */
 /* ================================================================== */
 export default function DashboardPage() {
+  const router = useRouter();
   const {
     stats, healthData, loading, error, repoPath,
     recentRepos, removeRecentRepo, analyze, setRepoPath,
@@ -147,7 +247,7 @@ export default function DashboardPage() {
     }
   }, [repoPath, stats, graphData.nodes.length, fetchGraph]);
 
-  // Compute dead code + god modules
+  // Compute insights from graph data
   const deadCode = useMemo(() => {
     return graphData.nodes.filter(n => n.indegree === 0 && n.outdegree === 0);
   }, [graphData.nodes]);
@@ -156,6 +256,18 @@ export default function DashboardPage() {
     return graphData.nodes
       .filter(n => n.indegree >= 10)
       .sort((a, b) => b.indegree - a.indegree);
+  }, [graphData.nodes]);
+
+  const mostCritical = useMemo(() => {
+    if (graphData.nodes.length === 0) return null;
+    return graphData.nodes.reduce((best, n) =>
+      n.indegree > (best?.indegree || 0) ? n : best, null);
+  }, [graphData.nodes]);
+
+  const mostDepended = useMemo(() => {
+    if (graphData.nodes.length === 0) return null;
+    return graphData.nodes.reduce((best, n) =>
+      n.outdegree > (best?.outdegree || 0) ? n : best, null);
   }, [graphData.nodes]);
 
   // Relative time formatter
@@ -191,6 +303,14 @@ export default function DashboardPage() {
     analyze(p);
   };
 
+  // Chart data
+  const chartData = useMemo(() => {
+    return historyData.map(d => ({
+      ...d,
+      date: formatDate(d.timestamp),
+    }));
+  }, [historyData]);
+
   /* ────────────────────────────────────────────────────────────────── */
   /*  Welcome Screen — No Repo Analyzed                                */
   /* ────────────────────────────────────────────────────────────────── */
@@ -198,21 +318,19 @@ export default function DashboardPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[80vh] px-6">
         <div className="text-center space-y-5 animate-fade-in" style={{ maxWidth: 520 }}>
-          {/* CNI Branding */}
           <h1
             className="text-5xl font-extrabold tracking-tight"
-            style={{ color: 'var(--accent)' }}
+            style={{ color: T.text }}
           >
             CNI
           </h1>
           <p
             className="text-sm"
-            style={{ color: 'var(--text-muted)', letterSpacing: '0.04em' }}
+            style={{ color: T.muted, letterSpacing: '0.04em' }}
           >
             Codebase Neural Interface
           </p>
 
-          {/* Input */}
           <div className="mt-8 space-y-3" style={{ maxWidth: 480, margin: '2rem auto 0' }}>
             <input
               type="text"
@@ -223,9 +341,17 @@ export default function DashboardPage() {
               onKeyDown={(e) => { if (e.key === 'Enter') handleAnalyze(); }}
             />
             <button
-              className="btn-primary w-full h-11 text-sm font-semibold disabled:opacity-50"
+              className="w-full h-11 text-sm font-semibold disabled:opacity-50"
               disabled={loading || !localPath.trim()}
               onClick={handleAnalyze}
+              style={{
+                background: T.text,
+                color: T.bg,
+                border: `1px solid ${T.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -238,70 +364,48 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* Privacy badges */}
-          <div className="flex items-center justify-center gap-3 text-xs pt-2" style={{ color: 'var(--text-muted)' }}>
+          <div className="flex items-center justify-center gap-3 text-xs pt-2" style={{ color: T.muted }}>
             <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: T.green }} />
               100% Local
             </span>
             <span>·</span><span>No Cloud</span><span>·</span><span>No Data Leaves Your Machine</span>
           </div>
         </div>
 
-        {/* Recent Repositories */}
         {recentRepos.length > 0 && (
           <div className="w-full mt-12 animate-slide-up" style={{ maxWidth: 580 }}>
-            <p className="text-label mb-3 px-1">RECENT REPOSITORIES</p>
-            <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+            <p style={{
+              fontSize: '0.65rem',
+              fontWeight: 500,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: T.muted,
+              marginBottom: 12,
+              paddingLeft: 4,
+            }}>RECENT REPOSITORIES</p>
+            <div className="flex gap-2 flex-wrap">
               {recentRepos.map(repo => (
-                <div
+                <button
                   key={repo.path}
-                  className="flex-shrink-0 cursor-pointer transition-all duration-200 group"
-                  style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid rgba(255,255,255,0.04)',
-                    borderRadius: 14,
-                    padding: '16px 18px',
-                    minWidth: 200,
-                    maxWidth: 260,
-                  }}
+                  className="group"
                   onClick={() => handleRepoClick(repo.path)}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'var(--bg-card-hover)';
+                  style={{
+                    background: T.border,
+                    color: T.muted,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.75rem',
+                    borderRadius: 9999,
+                    padding: '4px 12px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'var(--bg-card)';
-                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = T.text; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}
                 >
-                  <div className="flex items-start justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <FolderGit2 size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                      <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                        {repo.name}
-                      </span>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removeRecentRepo(repo.path); }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all duration-150 ml-2"
-                      style={{ color: 'var(--text-muted)' }}
-                      onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                  <p
-                    className="text-[10px] truncate mb-1"
-                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
-                  >
-                    {repo.path}
-                  </p>
-                  <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--text-secondary)' }}>
-                    <span>{repo.filesCount} files</span>
-                    <span style={{ color: 'var(--text-muted)' }}>·</span>
-                    <span>{formatRelative(repo.lastAnalyzed)}</span>
-                  </div>
-                </div>
+                  {repo.name}
+                </button>
               ))}
             </div>
           </div>
@@ -332,10 +436,10 @@ export default function DashboardPage() {
         <div className="text-center space-y-4 animate-fade-in">
           <div
             className="w-10 h-10 mx-auto border-2 rounded-full animate-spin"
-            style={{ borderColor: 'var(--border-default)', borderTopColor: 'var(--accent)' }}
+            style={{ borderColor: T.border, borderTopColor: T.text }}
           />
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Analyzing repository…</p>
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Scanning files and building dependency graph</p>
+          <p className="text-sm" style={{ color: T.muted }}>Analyzing repository…</p>
+          <p className="text-xs" style={{ color: T.muted }}>Scanning files and building dependency graph</p>
         </div>
       </div>
     );
@@ -344,359 +448,779 @@ export default function DashboardPage() {
   /* ────────────────────────────────────────────────────────────────── */
   /*  Analyzed Dashboard                                               */
   /* ────────────────────────────────────────────────────────────────── */
-  const shortName = repoPath
-    ? repoPath.replace(/\\/g, '/').split('/').filter(Boolean).pop() || repoPath
-    : '';
-
+  const healthScore = healthData?.score ?? 0;
   const isolatedCount = stats.isolated ?? 0;
+  const filesCount = stats.files ?? 0;
+  const depsCount = stats.dependencies ?? 0;
 
   return (
-    <div style={{ padding: 28 }} className="animate-fade-in">
+    <div
+      className="animate-fade-in"
+      style={{
+        padding: 28,
+        background: `radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px)`,
+        backgroundSize: '24px 24px',
+        minHeight: 'calc(100vh - 56px)',
+      }}
+    >
       {/* ── Top Bar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 36 }}>
-        <h1 className="text-section-header">Dashboard</h1>
-        <div className="flex items-center gap-3">
-          <span
-            className="text-xs truncate"
-            style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', maxWidth: 320 }}
-            title={repoPath}
-          >
-            {repoPath}
-          </span>
-          {stats && (
-            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-              {formatRelative(new Date().toISOString())}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 20,
+      }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.8rem',
+          color: T.muted,
+          maxWidth: 400,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }} title={repoPath}>
+          {shortPath(repoPath)}
+        </span>
+        <span style={{
+          fontSize: '0.7rem',
+          color: T.muted,
+        }}>
+          · {formatRelative(new Date().toISOString())}
+        </span>
+      </div>
+
+      {/* ── Summary Bar ──────────────────────────────────────────────── */}
+      <div style={{
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: 12,
+        padding: '16px 24px',
+        marginBottom: 20,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 24,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              color: T.text,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {filesCount.toLocaleString()}
             </span>
+            <span style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: T.muted,
+            }}>
+              files
+            </span>
+          </div>
+          <span style={{ color: T.muted, fontSize: '0.75rem' }}>·</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              color: T.text,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {depsCount.toLocaleString()}
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: T.muted,
+            }}>
+              deps
+            </span>
+          </div>
+          <span style={{ color: T.muted, fontSize: '0.75rem' }}>·</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: T.muted,
+            }}>
+              Health:
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              color: T.text,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {healthScore}
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.8rem',
+              color: T.muted,
+            }}>
+              /100
+            </span>
+          </div>
+        </div>
+        {/* Thin amber progress bar */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          height: 2,
+          width: `${Math.min(healthScore, 100)}%`,
+          background: T.amber,
+          transition: 'width 1s ease-out',
+        }} />
+      </div>
+
+      {/* ── Two Column Layout ────────────────────────────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '60% 1fr',
+        gap: 16,
+        marginBottom: 16,
+      }}>
+        {/* ── LEFT: Codebase Timeline ──────────────────────────────── */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 20,
+        }}>
+          <h3 style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: T.text,
+            marginBottom: 16,
+          }}>
+            Codebase Timeline
+          </h3>
+          {historyLoading ? (
+            <div style={{
+              height: 200,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <div
+                className="w-6 h-6 border-2 rounded-full animate-spin"
+                style={{ borderColor: T.border, borderTopColor: T.text }}
+              />
+            </div>
+          ) : chartData.length > 0 ? (
+            <div style={{ height: 200 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="gradFiles" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="rgba(255,255,255,0.6)" stopOpacity={0.05} />
+                      <stop offset="95%" stopColor="rgba(255,255,255,0.6)" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradDeps" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={T.muted} stopOpacity={0.05} />
+                      <stop offset="95%" stopColor={T.muted} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradHealth" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={T.amber} stopOpacity={0.05} />
+                      <stop offset="95%" stopColor={T.amber} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={T.border}
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 11, fill: T.muted, fontFamily: 'var(--font-mono)' }}
+                    axisLine={{ stroke: T.border }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 11, fill: T.muted, fontFamily: 'var(--font-mono)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    domain={[0, 100]}
+                    tick={{ fontSize: 11, fill: T.muted, fontFamily: 'var(--font-mono)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={35}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend content={<ChartLegend />} />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="files"
+                    name="Files"
+                    stroke="rgba(255,255,255,0.6)"
+                    strokeWidth={2}
+                    fill="url(#gradFiles)"
+                    dot={{ r: 2, fill: 'rgba(255,255,255,0.6)', strokeWidth: 0 }}
+                    activeDot={{ r: 4, fill: T.text, stroke: 'rgba(255,255,255,0.2)', strokeWidth: 3 }}
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="dependencies"
+                    name="Dependencies"
+                    stroke={T.muted}
+                    strokeWidth={2}
+                    fill="url(#gradDeps)"
+                    dot={{ r: 2, fill: T.muted, strokeWidth: 0 }}
+                    activeDot={{ r: 4, fill: T.muted, stroke: 'rgba(113,113,122,0.2)', strokeWidth: 3 }}
+                  />
+                  <Area
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="health"
+                    name="Health"
+                    stroke={T.amber}
+                    strokeWidth={2}
+                    fill="url(#gradHealth)"
+                    dot={{ r: 2, fill: T.amber, strokeWidth: 0 }}
+                    activeDot={{ r: 4, fill: T.amber, stroke: 'rgba(245,158,11,0.2)', strokeWidth: 3 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div style={{
+              height: 200,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}>
+              <span style={{ color: T.muted, fontSize: '0.75rem' }}>
+                Analyze over time to see trends
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT: Action Items Panel ────────────────────────────── */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '16px 20px 12px',
+            borderBottom: `1px solid ${T.border}`,
+          }}>
+            <h3 style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: T.text,
+            }}>
+              Action Items
+            </h3>
+          </div>
+
+          {/* God modules action */}
+          <ActionItem
+            icon={<AlertTriangle size={14} style={{ color: T.amber }} />}
+            label={
+              godModules.length > 0
+                ? <><span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{godModules.length}</span> god modules need attention</>
+                : 'No god modules detected'
+            }
+            onClick={() => router.push('/health')}
+            borderBottom
+          />
+
+          {/* Unused files action */}
+          <ActionItem
+            icon={<CheckCircle2 size={14} style={{ color: T.text }} />}
+            label={
+              deadCode.length > 0
+                ? <><span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{deadCode.length}</span> unused files can be removed</>
+                : 'No unused files detected'
+            }
+            onClick={() => {
+              if (deadCode.length > 0) {
+                router.push(`/impact?file=${encodeURIComponent(deadCode[0]?.label || '')}`);
+              } else {
+                router.push('/impact');
+              }
+            }}
+            borderBottom
+          />
+
+          {/* Most critical module */}
+          {mostCritical && mostCritical.indegree > 0 && (
+            <ActionItem
+              icon={<ArrowRight size={14} style={{ color: T.text }} />}
+              label={
+                <>Most critical: <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{shortPath(mostCritical.label)}</span> <span style={{ color: T.muted }}>({mostCritical.indegree} dependents)</span></>
+              }
+              onClick={() => router.push('/graph')}
+              borderBottom
+            />
+          )}
+
+          {/* Most depended on */}
+          {mostDepended && mostDepended.outdegree > 0 && (
+            <ActionItem
+              icon={<ArrowRight size={14} style={{ color: T.text }} />}
+              label={
+                <>Start with: <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{shortPath(mostDepended.label)}</span> <span style={{ color: T.muted }}>({mostDepended.outdegree} outgoing)</span></>
+              }
+              onClick={() => router.push('/graph')}
+            />
           )}
         </div>
       </div>
 
-      {/* ── Row 1: Stat Cards ────────────────────────────────────────── */}
-      <div className="grid grid-cols-4" style={{ gap: 16, marginBottom: 16 }}>
-        {/* Files Scanned */}
-        <div
-          className="animate-slide-up"
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 14,
-            padding: 24,
-            animationDelay: '0ms',
-          }}
-        >
-          <p className="text-label" style={{ marginBottom: 4 }}>FILES SCANNED</p>
-          <p
-            className="text-stat"
-            style={{ color: 'var(--accent)' }}
-          >
-            {(stats.files ?? 0).toLocaleString()}
+      {/* ── Stats 2×2 Grid ────────────────────────────────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 16,
+        marginBottom: 16,
+      }}>
+        {/* Row 1: Files */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 24,
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: T.muted,
+            marginBottom: 4,
+          }}>FILES</p>
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '2.5rem',
+            fontWeight: 700,
+            color: T.text,
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1,
+          }}>
+            {filesCount.toLocaleString()}
           </p>
         </div>
 
-        {/* Dependencies */}
-        <div
-          className="animate-slide-up"
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 14,
-            padding: 24,
-            animationDelay: '60ms',
-          }}
-        >
-          <p className="text-label" style={{ marginBottom: 4 }}>DEPENDENCIES</p>
-          <p
-            className="text-stat"
-            style={{ color: '#3b82f6' }}
-          >
-            {(stats.dependencies ?? 0).toLocaleString()}
+        {/* Row 1: Dependencies */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 24,
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: T.muted,
+            marginBottom: 4,
+          }}>DEPENDENCIES</p>
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '2.5rem',
+            fontWeight: 700,
+            color: T.text,
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1,
+          }}>
+            {depsCount.toLocaleString()}
           </p>
         </div>
 
-        {/* Health Score Gauge */}
-        <div
-          className="flex flex-col items-center animate-slide-up"
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 14,
-            padding: 24,
-            animationDelay: '120ms',
-          }}
-        >
-          <p className="text-label self-start" style={{ marginBottom: 8 }}>HEALTH SCORE</p>
-          <HealthGauge score={healthData?.score} size={120} />
+        {/* Row 2: Health Gauge */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 24,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: T.muted,
+            marginBottom: 8,
+            alignSelf: 'flex-start',
+          }}>HEALTH SCORE</p>
+          <HealthGauge score={healthScore} />
         </div>
 
-        {/* Isolated Modules */}
-        <div
-          className="animate-slide-up"
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 14,
-            padding: 24,
-            animationDelay: '180ms',
-          }}
-        >
-          <p className="text-label" style={{ marginBottom: 4 }}>ISOLATED MODULES</p>
-          <p
-            className="text-stat"
-            style={{ color: isolatedCount > 5 ? '#eab308' : 'white' }}
-          >
+        {/* Row 2: Isolated */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 24,
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: T.muted,
+            marginBottom: 4,
+          }}>ISOLATED</p>
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '2.5rem',
+            fontWeight: 700,
+            color: isolatedCount > 5 ? T.amber : T.text,
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1,
+          }}>
             {isolatedCount.toLocaleString()}
           </p>
         </div>
       </div>
 
-      {/* ── Row 2: Timeline + Alerts ─────────────────────────────────── */}
-      <div className="grid" style={{ gridTemplateColumns: '58% 1fr', gap: 16, marginBottom: 16 }}>
-        {/* Left: Codebase Timeline */}
-        <div
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid rgba(255,255,255,0.04)',
-            borderRadius: 14,
-            padding: 24,
-          }}
-        >
-          <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
-            <TrendingUp size={16} style={{ color: '#3b82f6' }} />
-            <h3 className="text-section-header" style={{ fontSize: '0.875rem' }}>
-              Codebase Timeline
+      {/* ── God Modules + Dead Code side by side ─────────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 16,
+        marginBottom: 16,
+      }}>
+        {/* God Modules */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 20,
+        }}>
+          <div style={{ marginBottom: 4 }}>
+            <h3 style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: T.text,
+            }}>
+              God Modules
             </h3>
+            <p style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: T.muted,
+              marginTop: 2,
+            }}>
+              Files with 10+ dependents
+            </p>
           </div>
-          {historyLoading ? (
-            <div className="flex items-center justify-center" style={{ height: 220 }}>
-              <div
-                className="w-6 h-6 border-2 rounded-full animate-spin"
-                style={{ borderColor: 'var(--border-default)', borderTopColor: 'var(--accent)' }}
-              />
-            </div>
-          ) : historyData.length > 0 ? (
-            <div style={{ height: 220 }}>
-              <RechartsChart data={historyData} />
+          {godModules.length > 0 ? (
+            <div style={{ marginTop: 12 }}>
+              {godModules.slice(0, godExpanded ? undefined : 5).map(n => (
+                <div
+                  key={n.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 0',
+                    borderBottom: `1px solid ${T.border}`,
+                  }}
+                >
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.8rem',
+                    color: T.text,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    marginRight: 12,
+                  }}>
+                    {shortPath(n.label)}
+                  </span>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: 9999,
+                    flexShrink: 0,
+                    background: n.indegree > 20 ? T.red : T.amber,
+                    color: n.indegree > 20 ? '#fecaca' : '#fef3c7',
+                  }}>
+                    {n.indegree}
+                  </span>
+                </div>
+              ))}
+              {godModules.length > 5 && (
+                <button
+                  onClick={() => setGodExpanded(!godExpanded)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: '0.75rem',
+                    color: T.muted,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    marginTop: 8,
+                    fontFamily: 'var(--font-ui)',
+                    transition: 'color 0.15s ease',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = T.text}
+                  onMouseLeave={e => e.currentTarget.style.color = T.muted}
+                >
+                  {godExpanded ? (
+                    <><ChevronUp size={12} /> Show less</>
+                  ) : (
+                    <><ChevronDown size={12} /> +{godModules.length - 5} more</>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => router.push('/health')}
+                style={{
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: '0.75rem',
+                  color: T.muted,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  marginTop: 12,
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = T.text}
+                onMouseLeave={e => e.currentTarget.style.color = T.muted}
+              >
+                View all →
+              </button>
             </div>
           ) : (
-            <div
-              className="flex flex-col items-center justify-center gap-2"
-              style={{ height: 220 }}
-            >
-              <TrendingUp size={24} style={{ color: 'var(--text-muted)' }} />
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                Analyze over time to see trends
-              </p>
-            </div>
+            <p style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: T.muted,
+              marginTop: 12,
+            }}>No god modules detected ✨</p>
           )}
         </div>
 
-        {/* Right: God Modules + Unused Files stacked */}
-        <div className="flex flex-col" style={{ gap: 16 }}>
-          {/* God Modules */}
-          <div
-            className="flex-1"
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid rgba(255,255,255,0.04)',
-              borderRadius: 14,
-              padding: 24,
-            }}
-          >
-            <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={15} style={{ color: '#eab308' }} />
-                <h3 className="text-sm font-semibold" style={{ color: 'white' }}>
-                  God Modules
-                </h3>
-                {godModules.length > 0 && (
-                  <span
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-                    style={{
-                      background: 'var(--warning-muted)',
-                      color: '#eab308',
-                    }}
-                  >
-                    {godModules.length}
-                  </span>
-                )}
-              </div>
-            </div>
-            <p className="text-[11px]" style={{ color: 'var(--text-muted)', marginBottom: 12 }}>
-              Files with 10+ dependents
+        {/* Dead Code */}
+        <div style={{
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 20,
+        }}>
+          <div style={{ marginBottom: 4 }}>
+            <h3 style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: T.text,
+            }}>
+              Unused Files
+            </h3>
+            <p style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: T.muted,
+              marginTop: 2,
+            }}>
+              No imports or dependents
             </p>
-            {godModules.length > 0 ? (
-              <div className="space-y-1">
-                {godModules.slice(0, godExpanded ? undefined : 5).map(n => (
-                  <div key={n.id} className="flex items-center justify-between py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                    <span
-                      className="text-xs truncate flex-1 mr-3"
-                      style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}
-                    >
-                      {n.label}
-                    </span>
-                    <span
-                      className="text-xs font-bold flex-shrink-0"
-                      style={{
-                        fontVariantNumeric: 'tabular-nums',
-                        color: n.indegree >= 15 ? '#ef4444' : '#eab308',
-                      }}
-                    >
-                      {n.indegree}
-                    </span>
-                  </div>
-                ))}
-                {godModules.length > 5 && (
-                  <button
-                    onClick={() => setGodExpanded(!godExpanded)}
-                    className="flex items-center gap-1 text-xs mt-1 transition-colors"
-                    style={{ color: 'var(--accent)' }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                  >
-                    {godExpanded ? (
-                      <><ChevronUp size={12} /> Show less</>
-                    ) : (
-                      <><ChevronDown size={12} /> +{godModules.length - 5} more</>
-                    )}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No god modules detected ✨</p>
-            )}
           </div>
-
-          {/* Unused Files */}
-          <div
-            className="flex-1"
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid rgba(255,255,255,0.04)',
-              borderRadius: 14,
-              padding: 24,
-            }}
-          >
-            <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-              <div className="flex items-center gap-2">
-                <Trash2 size={15} style={{ color: 'var(--text-secondary)' }} />
-                <h3 className="text-sm font-semibold" style={{ color: 'white' }}>
-                  Unused Files
-                </h3>
-                {deadCode.length > 0 && (
-                  <span
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    {deadCode.length}
+          {deadCode.length > 0 ? (
+            <div style={{ marginTop: 12 }}>
+              {deadCode.slice(0, deadExpanded ? undefined : 5).map(n => (
+                <div
+                  key={n.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 0',
+                    borderBottom: `1px solid ${T.border}`,
+                  }}
+                >
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.8rem',
+                    color: T.text,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    marginRight: 12,
+                  }}>
+                    {shortPath(n.label)}
                   </span>
-                )}
-              </div>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.7rem',
+                    padding: '2px 8px',
+                    borderRadius: 9999,
+                    flexShrink: 0,
+                    background: T.border,
+                    color: T.muted,
+                  }}>
+                    0 deps
+                  </span>
+                </div>
+              ))}
+              {deadCode.length > 5 && (
+                <button
+                  onClick={() => setDeadExpanded(!deadExpanded)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: '0.75rem',
+                    color: T.muted,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    marginTop: 8,
+                    fontFamily: 'var(--font-ui)',
+                    transition: 'color 0.15s ease',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = T.text}
+                  onMouseLeave={e => e.currentTarget.style.color = T.muted}
+                >
+                  {deadExpanded ? (
+                    <><ChevronUp size={12} /> Show less</>
+                  ) : (
+                    <><ChevronDown size={12} /> +{deadCode.length - 5} more</>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={() => router.push('/impact')}
+                style={{
+                  fontFamily: 'var(--font-ui)',
+                  fontSize: '0.75rem',
+                  color: T.muted,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  marginTop: 12,
+                  transition: 'color 0.15s ease',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = T.text}
+                onMouseLeave={e => e.currentTarget.style.color = T.muted}
+              >
+                Analyze impact →
+              </button>
             </div>
-            {deadCode.length > 0 ? (
-              <div className="space-y-1">
-                {deadCode.slice(0, deadExpanded ? undefined : 5).map(n => (
-                  <p
-                    key={n.id}
-                    className="text-xs truncate py-1"
-                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', borderBottom: '1px solid rgba(255,255,255,0.03)' }}
-                  >
-                    {n.label}
-                  </p>
-                ))}
-                {deadCode.length > 5 && (
-                  <button
-                    onClick={() => setDeadExpanded(!deadExpanded)}
-                    className="flex items-center gap-1 text-xs mt-1 transition-colors"
-                    style={{ color: 'var(--accent)' }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                  >
-                    {deadExpanded ? (
-                      <><ChevronUp size={12} /> Show less</>
-                    ) : (
-                      <><ChevronDown size={12} /> +{deadCode.length - 5} more</>
-                    )}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No dead code detected ✨</p>
-            )}
-          </div>
+          ) : (
+            <p style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.75rem',
+              color: T.muted,
+              marginTop: 12,
+            }}>No dead code detected ✨</p>
+          )}
         </div>
       </div>
 
-      {/* ── Row 3: Recent Repositories ───────────────────────────────── */}
+      {/* ── Recent Repos (compact bottom pills) ──────────────────────── */}
       {recentRepos.length > 0 && (
-        <div className="animate-slide-up" style={{ marginTop: 36 }}>
-          <p className="text-label mb-3">RECENT REPOSITORIES</p>
-          <div className="flex overflow-x-auto pb-2" style={{ gap: 16, scrollbarWidth: 'thin' }}>
+        <div style={{ marginTop: 28 }}>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: T.muted,
+            marginBottom: 10,
+          }}>RECENT</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {recentRepos.map(repo => {
               const isActive = repo.path === repoPath;
               return (
-                <div
+                <button
                   key={repo.path}
-                  className="flex-shrink-0 cursor-pointer transition-all duration-200 group"
-                  style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid rgba(255,255,255,0.04)',
-                    borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
-                    borderRadius: 14,
-                    padding: '14px 18px',
-                    minWidth: 200,
-                    maxWidth: 260,
-                  }}
                   onClick={() => handleRepoClick(repo.path)}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'var(--bg-card-hover)';
+                  style={{
+                    background: T.border,
+                    color: isActive ? T.text : T.muted,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.7rem',
+                    borderRadius: 9999,
+                    padding: '4px 12px',
+                    border: isActive ? `1px solid ${T.muted}` : '1px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'var(--bg-card)';
-                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = T.text; }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = T.muted; }}
                 >
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <FolderGit2
-                        size={14}
-                        style={{ color: isActive ? 'var(--accent)' : 'var(--text-secondary)', flexShrink: 0 }}
-                      />
-                      <span
-                        className="text-xs font-semibold truncate"
-                        style={{ color: isActive ? 'var(--accent)' : 'var(--text-primary)' }}
-                      >
-                        {repo.name}
-                      </span>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removeRecentRepo(repo.path); }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all duration-150 ml-2"
-                      style={{ color: 'var(--text-muted)' }}
-                      onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                  <p
-                    className="text-[10px] truncate mb-1"
-                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
-                  >
-                    {repo.path}
-                  </p>
-                  <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--text-secondary)' }}>
-                    <span>{repo.filesCount} files</span>
-                    <span style={{ color: 'var(--text-muted)' }}>·</span>
-                    <span>{formatRelative(repo.lastAnalyzed)}</span>
-                  </div>
-                </div>
+                  {repo.name}
+                </button>
               );
             })}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/* ================================================================== */
+/*  ActionItem sub-component                                           */
+/* ================================================================== */
+function ActionItem({ icon, label, onClick, borderBottom = false }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '12px 16px',
+        width: '100%',
+        background: 'transparent',
+        border: 'none',
+        borderBottom: borderBottom ? `1px solid ${T.border}` : 'none',
+        cursor: 'pointer',
+        textAlign: 'left',
+        fontFamily: 'var(--font-ui)',
+        fontSize: '0.8rem',
+        color: T.muted,
+        transition: 'background 0.15s ease',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = T.border; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <span style={{ flexShrink: 0 }}>{icon}</span>
+      <span>{label}</span>
+    </button>
   );
 }
