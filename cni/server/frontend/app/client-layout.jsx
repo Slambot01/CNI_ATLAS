@@ -1,8 +1,9 @@
 'use client';
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import Sidebar from '../components/Sidebar';
 import StatsBar from '../components/StatsBar';
+import CommandPalette from '../components/CommandPalette';
 import AppContextProvider, { useAppContext } from '../context/AppContext';
 
 /**
@@ -16,10 +17,26 @@ export function useAnalysisContext() {
 
 function LayoutShell({ children }) {
   const ctx = useAppContext();
+  const [cmdkOpen, setCmdkOpen] = useState(false);
+
+  /* ── CMD+K / CTRL+K global listener ────────────────────────────── */
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdkOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const closePalette = useCallback(() => setCmdkOpen(false), []);
+  const openPalette = useCallback(() => setCmdkOpen(true), []);
 
   return (
     <>
-      <Sidebar repoPath={ctx.repoPath} isAnalyzed={ctx.isAnalyzed} />
+      <Sidebar repoPath={ctx.repoPath} isAnalyzed={ctx.isAnalyzed} onOpenCommandPalette={openPalette} />
       {/* Top bar — uses CSS var for sidebar-aware left offset */}
       <header
         className="fixed top-0 right-0 h-14 flex items-center gap-3 px-5 z-30"
@@ -105,6 +122,9 @@ function LayoutShell({ children }) {
       </main>
 
       <StatsBar stats={ctx.stats} healthData={ctx.healthData} />
+
+      {/* ── Command Palette ── */}
+      <CommandPalette open={cmdkOpen} onClose={closePalette} />
     </>
   );
 }

@@ -16,6 +16,7 @@ import {
   FolderGit2,
   PanelLeftClose,
   PanelLeftOpen,
+  Command,
 } from 'lucide-react';
 
 /* ────────────────────────────────────────────────────────────────── */
@@ -34,9 +35,78 @@ const EXPANDED_WIDTH  = 220;
 const LS_KEY          = 'cni_sidebar_collapsed';
 
 /* ────────────────────────────────────────────────────────────────── */
+/*  Command Palette Hint                                             */
+/* ────────────────────────────────────────────────────────────────── */
+function CmdKHint({ collapsed, onOpenCommandPalette }) {
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(
+      typeof navigator !== 'undefined' &&
+      (/Mac|iPod|iPhone|iPad/.test(navigator.platform) ||
+       navigator.userAgentData?.platform === 'macOS')
+    );
+  }, []);
+
+  const shortcut = isMac ? '⌘K' : 'Ctrl K';
+
+  if (collapsed) {
+    return (
+      <button
+        onClick={onOpenCommandPalette}
+        className="flex items-center justify-center py-2 mx-2 rounded-lg transition-colors duration-150 group relative"
+        style={{ color: '#71717a' }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.background = 'transparent'; }}
+      >
+        <Command size={14} />
+        {/* Tooltip */}
+        <span
+          className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
+          style={{
+            background: '#1a1a1e',
+            border: '1px solid var(--border-hover)',
+            color: 'var(--text-primary)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            borderRadius: 8,
+          }}
+        >
+          Command palette
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={onOpenCommandPalette}
+      className="flex items-center gap-2.5 mx-2 px-3 py-2 rounded-lg transition-colors duration-150"
+      style={{ color: '#71717a' }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.background = 'transparent'; }}
+    >
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '0.7rem',
+        background: '#1f1f23',
+        borderRadius: 4,
+        padding: '2px 6px',
+      }}>
+        {shortcut}
+      </span>
+      <span style={{
+        fontSize: '0.7rem',
+      }}>
+        Command palette
+      </span>
+    </button>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
 /*  Sidebar Component                                                */
 /* ────────────────────────────────────────────────────────────────── */
-export default function Sidebar() {
+export default function Sidebar({ onOpenCommandPalette }) {
   const pathname = usePathname();
   const router   = useRouter();
   const ctx      = useAppContext();
@@ -324,6 +394,11 @@ export default function Sidebar() {
       {/*  Spacer                                                    */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="flex-1" />
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/*  Command Palette Hint                                     */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <CmdKHint collapsed={collapsed} onOpenCommandPalette={onOpenCommandPalette} />
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/*  Repo Indicator                                            */}
