@@ -1,13 +1,138 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAnalysisContext } from '../client-layout';
-import { Download, Zap, AlertTriangle, Shield } from 'lucide-react';
+import {
+  Download, Zap, AlertTriangle, Check,
+  Lightbulb, GitBranch, File, ArrowRight,
+} from 'lucide-react';
 import { exportImpactReport } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
 
+/* ================================================================== */
+/*  Theme                                                              */
+/* ================================================================== */
+const T = {
+  bg: '#09090b',
+  surface: '#111113',
+  border: '#1f1f23',
+  text: '#ffffff',
+  muted: '#71717a',
+  amber: '#f59e0b',
+  green: '#22c55e',
+  red: '#ef4444',
+};
+
+/* ================================================================== */
+/*  Helpers                                                            */
+/* ================================================================== */
+function shortPath(p) {
+  if (!p) return '';
+  return p.split(/[\\/]/).slice(-2).join('/');
+}
+
+function classifyFile(dep, nodes) {
+  const node = nodes.find(n => n.label === dep.file || shortPath(n.label) === shortPath(dep.file));
+  if (!node) return 'Normal';
+  if (node.outdegree === 0 && node.indegree > 0) return 'Entry Point';
+  if (node.indegree >= 5 && node.outdegree >= 5) return 'Hub';
+  return 'Normal';
+}
+
+/* ================================================================== */
+/*  Autocomplete Input                                                 */
+/* ================================================================== */
+function FileInput({ value, onChange, onSubmit, nodes }) {
+  const [focused, setFocused] = useState(false);
+  const [showDrop, setShowDrop] = useState(false);
+  const wrapRef = useRef(null);
+
+  const matches = useMemo(() => {
+    if (!value.trim() || !nodes.length) return [];
+    const q = value.toLowerCase();
+    return nodes
+      .filter(n => shortPath(n.label).toLowerCase().includes(q))
+      .slice(0, 8)
+      .map(n => n.label);
+  }, [value, nodes]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setShowDrop(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, maxWidth: 440 }}>
+      <input
+        type="text"
+        placeholder="e.g. auth.py, models.py"
+        value={value}
+        onChange={e => { onChange(e.target.value); setShowDrop(true); }}
+        onFocus={() => { setFocused(true); setShowDrop(true); }}
+        onBlur={() => setFocused(false)}
+        onKeyDown={e => { if (e.key === 'Enter') { setShowDrop(false); onSubmit(); } }}
+        style={{
+          width: '100%',
+          background: T.surface,
+          border: `1px solid ${focused ? T.muted : T.border}`,
+          borderRadius: 8,
+          padding: '10px 16px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.875rem',
+          color: T.text,
+          outline: 'none',
+          transition: 'border-color 0.15s ease',
+        }}
+      />
+      {showDrop && matches.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          marginTop: 4,
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 8,
+          maxHeight: 200,
+          overflowY: 'auto',
+          zIndex: 50,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        }}>
+          {matches.map(m => (
+            <div
+              key={m}
+              style={{
+                padding: '8px 16px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.8125rem',
+                color: T.text,
+                cursor: 'pointer',
+                transition: 'background 0.15s ease',
+              }}
+              onMouseDown={() => { onChange(m); setShowDrop(false); }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.border; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              {shortPath(m)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================== */
+/*  Impact Page                                                        */
+/* ================================================================== */
 export default function ImpactPage() {
+  const router = useRouter();
   const {
     repoPath, stats, graphData,
     impactData: data, impactFile: cachedFile,
@@ -16,35 +141,18 @@ export default function ImpactPage() {
   } = useAnalysisContext();
   const [file, setFile] = useState('');
 
-  // Sync local input with cached file
-  useEffect(() => {
-    if (cachedFile && !file) setFile(cachedFile);
-  }, [cachedFile, file]);
+  useEffect(() => { if (cachedFile && !file) setFile(cachedFile); }, [cachedFile, file]);
 
-  // Pre-fill from URL query param
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const f = params.get('file');
+      const f = new URLSearchParams(window.location.search).get('file');
       if (f) setFile(f);
     }
   }, []);
 
-  // Fetch graph for suggestion pills
   useEffect(() => {
-    if (repoPath && stats && graphData.nodes.length === 0) {
-      fetchGraph(repoPath);
-    }
+    if (repoPath && stats && graphData.nodes.length === 0) fetchGraph(repoPath);
   }, [repoPath, stats, graphData.nodes.length, fetchGraph]);
-
-  // Suggestion pills: top files by indegree
-  const suggestions = useMemo(() => {
-    return graphData.nodes
-      .filter(n => n.indegree >= 3)
-      .sort((a, b) => b.indegree - a.indegree)
-      .slice(0, 5)
-      .map(n => n.label);
-  }, [graphData.nodes]);
 
   const handleAnalyze = () => {
     if (!file.trim() || !repoPath) return;
@@ -53,199 +161,448 @@ export default function ImpactPage() {
     fetchImpact(file.trim(), repoPath);
   };
 
+  // Suggestion pills (top indegree files when no results yet)
+  const suggestions = useMemo(() => {
+    return graphData.nodes
+      .filter(n => n.indegree >= 3)
+      .sort((a, b) => b.indegree - a.indegree)
+      .slice(0, 5)
+      .map(n => n.label);
+  }, [graphData.nodes]);
+
   if (!repoPath || !stats) return <NotAnalyzed />;
 
-  const maxScore = data?.dependents?.length > 0
-    ? Math.max(...data.dependents.map(d => d.score))
-    : 1;
+  // Derived data when results are available
+  const directCount = data?.direct ?? 0;
+  const transitiveCount = data?.transitive ?? 0;
+  const totalCount = directCount + transitiveCount;
+  const risk = data?.risk || 'LOW';
+  const dependents = data?.dependents || [];
+  const maxScore = dependents.length > 0 ? Math.max(...dependents.map(d => d.score)) : 1;
 
-  const riskConfig = {
-    HIGH: { bg: 'var(--danger-muted)', border: '#ef4444', color: '#ef4444' },
-    MEDIUM: { bg: 'var(--warning-muted)', border: '#eab308', color: '#eab308' },
-    LOW: { bg: 'var(--accent-muted)', border: 'var(--accent)', color: 'var(--accent)' },
+  // Classify & group dependents
+  const classified = dependents.map(d => ({
+    ...d,
+    type: classifyFile(d, graphData.nodes),
+  }));
+  const entryPoints = classified.filter(d => d.type === 'Entry Point');
+  const hubs = classified.filter(d => d.type === 'Hub');
+  const regulars = classified.filter(d => d.type === 'Normal');
+
+  // Risk config
+  const riskColor = risk === 'HIGH' ? T.red : risk === 'MEDIUM' ? T.amber : T.green;
+  const riskBg = risk === 'HIGH'
+    ? 'rgba(239,68,68,0.05)'
+    : risk === 'MEDIUM'
+      ? 'rgba(245,158,11,0.05)'
+      : 'rgba(34,197,94,0.05)';
+  const riskContext = risk === 'HIGH'
+    ? 'change with extreme caution'
+    : risk === 'MEDIUM'
+      ? 'review dependents before merging'
+      : 'safe to modify with basic testing';
+
+  const RiskIcon = risk === 'LOW' ? Check : AlertTriangle;
+
+  // Badge helper
+  const getBadge = (score) => {
+    if (score >= 7) return { bg: 'rgba(239,68,68,0.15)', color: '#fecaca', barColor: T.red };
+    if (score >= 4) return { bg: 'rgba(245,158,11,0.15)', color: '#fef3c7', barColor: T.amber };
+    return { bg: T.border, color: T.muted, barColor: T.muted };
   };
 
-  const getScoreColor = (score) => {
-    if (score >= 8) return '#ef4444';
-    if (score >= 5) return '#eab308';
-    return 'var(--text-primary)';
+  const getRowBg = (score) => {
+    if (score >= 7) return 'rgba(239,68,68,0.03)';
+    if (score >= 4) return 'rgba(245,158,11,0.03)';
+    return 'transparent';
+  };
+
+  // Render a group section
+  const renderGroup = (label, icon, items) => {
+    if (items.length === 0) return null;
+    return (
+      <>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 16px',
+          background: T.bg,
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+          {icon}
+          <span style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.75rem',
+            color: T.muted,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}>{label} ({items.length})</span>
+        </div>
+        {items.map((dep, i) => {
+          const badge = getBadge(dep.score);
+          const rowBg = getRowBg(dep.score);
+          const barW = Math.max(8, (dep.score / maxScore) * 100);
+          return (
+            <div
+              key={dep.file + i}
+              onClick={() => router.push('/graph')}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto auto 80px',
+                alignItems: 'center',
+                gap: 14,
+                padding: '12px 16px',
+                borderBottom: i < items.length - 1 ? `1px solid ${T.border}` : 'none',
+                background: rowBg,
+                cursor: 'pointer',
+                transition: 'background 0.15s ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(31,31,35,0.5)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = rowBg; }}
+            >
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.8rem',
+                color: T.text,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>{shortPath(dep.file)}</span>
+              <span style={{
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.75rem',
+                color: T.muted,
+              }}>{dep.type}</span>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 9999,
+                background: badge.bg,
+                color: badge.color,
+                fontVariantNumeric: 'tabular-nums',
+                textAlign: 'right',
+              }}>{dep.score.toFixed(1)}</span>
+              <div style={{
+                background: T.border,
+                borderRadius: 2,
+                height: 3,
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${barW}%`,
+                  height: '100%',
+                  borderRadius: 2,
+                  background: badge.barColor,
+                  transition: 'width 0.5s ease',
+                }} />
+              </div>
+            </div>
+          );
+        })}
+      </>
+    );
   };
 
   return (
     <div style={{ padding: 28 }} className="animate-fade-in">
-      {/* ── Top bar ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 36 }}>
-        <h1 className="text-section-header">Impact Analysis</h1>
+      {/* ── Title + Export ────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        marginBottom: 24,
+      }}>
+        <div>
+          <h1 style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '1.25rem',
+            fontWeight: 600,
+            color: T.text,
+          }}>Impact Analysis</h1>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.8125rem',
+            color: T.muted,
+            marginTop: 4,
+          }}>Analyze how changes propagate through your codebase</p>
+        </div>
         {data && (
           <button
             onClick={() => exportImpactReport(data, cachedFile, repoPath)}
-            className="flex items-center gap-1.5 text-xs font-medium transition-all duration-200"
-            style={{ padding: '6px 14px', borderRadius: 9999, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-muted)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: T.border,
+              border: `1px solid ${T.border}`,
+              color: T.muted,
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.8125rem',
+              borderRadius: 8,
+              padding: '8px 16px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = T.text; e.currentTarget.style.borderColor = T.muted; }}
+            onMouseLeave={e => { e.currentTarget.style.color = T.muted; e.currentTarget.style.borderColor = T.border; }}
           >
-            <Download size={14} /> Export
+            <Download size={16} />
+            Export Report
           </button>
         )}
       </div>
 
-      {/* ── Input section ───────────────────────────────────────── */}
-      <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24, marginBottom: 16 }}>
-        <p className="text-xs" style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-          Analyze the blast radius of changing a file
-        </p>
-        <div className="flex gap-3" style={{ maxWidth: 560 }}>
-          <input
-            type="text"
-            placeholder="Enter filename (e.g. cache.py)"
-            className="input-field flex-1 text-sm"
-            style={{ maxWidth: 400 }}
-            value={file}
-            onChange={(e) => setFile(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
-          />
-          <button
-            className="btn-primary text-sm font-semibold disabled:opacity-50 flex-shrink-0"
-            onClick={handleAnalyze}
-            disabled={loading || !file.trim()}
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Analyzing…
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5"><Zap size={14} /> Analyze Impact</span>
-            )}
-          </button>
-        </div>
-        {/* Suggestion pills */}
-        {suggestions.length > 0 && !data && (
-          <div className="flex flex-wrap mt-4" style={{ gap: 8 }}>
-            {suggestions.map(s => (
-              <button key={s} onClick={() => { setFile(s); }}
-                className="text-[11px] transition-all duration-200"
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  padding: '6px 14px',
-                  borderRadius: 9999,
-                  background: 'rgba(34, 197, 94, 0.08)',
-                  border: '1px solid rgba(34, 197, 94, 0.2)',
-                  color: 'var(--text-muted)',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)'; e.currentTarget.style.color = 'var(--accent)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(34, 197, 94, 0.08)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
+      {/* ── Input Section ────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex',
+        gap: 12,
+        marginBottom: 20,
+        alignItems: 'center',
+      }}>
+        <FileInput
+          value={file}
+          onChange={setFile}
+          onSubmit={handleAnalyze}
+          nodes={graphData.nodes}
+        />
+        <button
+          onClick={handleAnalyze}
+          disabled={loading || !file.trim()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: T.text,
+            color: T.bg,
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            borderRadius: 8,
+            padding: '10px 20px',
+            border: 'none',
+            cursor: loading || !file.trim() ? 'not-allowed' : 'pointer',
+            opacity: loading || !file.trim() ? 0.5 : 1,
+            transition: 'all 0.15s ease',
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { if (!loading && file.trim()) e.currentTarget.style.background = '#e4e4e7'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = T.text; }}
+        >
+          {loading ? (
+            <>
+              <span style={{
+                width: 14, height: 14,
+                border: '2px solid rgba(0,0,0,0.2)',
+                borderTopColor: T.bg,
+                borderRadius: '50%',
+                animation: 'spin 0.6s linear infinite',
+              }} />
+              Analyzing…
+            </>
+          ) : (
+            <><Zap size={14} /> Analyze Impact</>
+          )}
+        </button>
       </div>
+
+      {/* Suggestion pills (before results) */}
+      {suggestions.length > 0 && !data && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+          {suggestions.map(s => (
+            <button
+              key={s}
+              onClick={() => setFile(s)}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.7rem',
+                padding: '4px 12px',
+                borderRadius: 9999,
+                background: T.border,
+                border: 'none',
+                color: T.muted,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = T.text; }}
+              onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}
+            >
+              {shortPath(s)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 20 }}>
           <ErrorMessage message={error.message} hint={error.hint} onRetry={handleAnalyze} />
         </div>
       )}
 
-      {/* ── Results ─────────────────────────────────────────────── */}
+      {/* ── Results ──────────────────────────────────────────────── */}
       {data && (
-        <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Risk banner */}
-          {data.risk && (
-            <div
-              className="flex items-center gap-3"
-              style={{
-                background: riskConfig[data.risk]?.bg || 'var(--accent-muted)',
-                borderLeft: `3px solid ${riskConfig[data.risk]?.border || 'var(--accent)'}`,
-                borderRadius: 14,
-                padding: '14px 20px',
-              }}
-            >
-              <Shield size={16} style={{ color: riskConfig[data.risk]?.color, flexShrink: 0 }} />
-              <span className="text-sm font-semibold" style={{ color: riskConfig[data.risk]?.color }}>
-                {data.risk} RISK
-              </span>
-              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                — Changing <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{cachedFile}</span> affects {data.direct + (data.transitive || 0)} modules
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }} className="animate-slide-up">
+          {/* Risk Banner */}
+          <div style={{
+            background: riskBg,
+            borderLeft: `3px solid ${riskColor}`,
+            borderRadius: 12,
+            padding: 20,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <RiskIcon size={24} style={{ color: riskColor, flexShrink: 0 }} />
+              <span style={{
+                fontFamily: 'var(--font-ui)',
+                fontSize: '1rem',
+                fontWeight: 600,
+                color: T.text,
+              }}>
+                {risk} RISK
+                <span style={{ fontWeight: 400, color: T.muted }}>
+                  {' '}— Changing{' '}
+                  <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{shortPath(cachedFile)}</span>
+                  {risk === 'LOW'
+                    ? ' has limited impact'
+                    : ` affects ${totalCount} modules`}
+                </span>
               </span>
             </div>
-          )}
+            <p style={{
+              fontFamily: 'var(--font-ui)',
+              fontSize: '0.8125rem',
+              color: T.muted,
+              marginLeft: 34,
+            }}>
+              {risk === 'LOW'
+                ? `Only ${totalCount} files are affected. Safe to modify with basic testing.`
+                : `This file is imported by ${directCount} direct dependents and ${transitiveCount} transitive dependents`}
+            </p>
+          </div>
 
-          {/* Stat cards */}
-          <div className="grid grid-cols-3" style={{ gap: 16 }}>
-            <div className="text-center" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
-              <p className="text-label" style={{ marginBottom: 4 }}>DIRECT DEPENDENTS</p>
-              <p className="text-stat" style={{ color: '#3b82f6' }}>{data.direct}</p>
+          {/* Stats Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20 }}>
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.65rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: T.muted, marginBottom: 4 }}>DIRECT DEPENDENTS</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '2.5rem', fontWeight: 700, color: T.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{directCount}</p>
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: T.muted, marginTop: 6 }}>{directCount} files directly import this</p>
             </div>
-            <div className="text-center" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
-              <p className="text-label" style={{ marginBottom: 4 }}>TRANSITIVE DEPENDENTS</p>
-              <p className="text-stat" style={{ color: 'var(--accent)' }}>{data.transitive || 0}</p>
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20 }}>
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.65rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: T.muted, marginBottom: 4 }}>TRANSITIVE DEPENDENTS</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '2.5rem', fontWeight: 700, color: T.text, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{transitiveCount}</p>
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: T.muted, marginTop: 6 }}>{transitiveCount} more are affected transitively</p>
             </div>
-            <div className="text-center" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
-              <p className="text-label" style={{ marginBottom: 4 }}>RISK LEVEL</p>
-              <p className="text-stat" style={{ color: riskConfig[data.risk]?.color || 'white' }}>
-                {data.risk}
-              </p>
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20 }}>
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.65rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.1em', color: T.muted, marginBottom: 4 }}>RISK LEVEL</p>
+              <p style={{ fontFamily: 'var(--font-mono)', fontSize: '2rem', fontWeight: 700, color: riskColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{risk}</p>
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.75rem', color: T.muted, marginTop: 6 }}>{riskContext}</p>
             </div>
           </div>
 
-          {/* Affected files table */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
-            <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
-              <AlertTriangle size={15} style={{ color: '#eab308' }} />
-              <h3 className="text-sm font-semibold" style={{ color: 'white' }}>Affected Files</h3>
-              {data.dependents?.length > 0 && (
-                <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-                  style={{ background: 'var(--warning-muted)', color: '#eab308' }}>{data.dependents.length}</span>
-              )}
+          {/* Affected Files Table */}
+          <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
+              <h3 style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', fontWeight: 600, color: T.text }}>Affected Files</h3>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: T.muted }}>({dependents.length})</span>
             </div>
-            {data.dependents?.length > 0 ? (
+
+            {dependents.length > 0 ? (
               <div>
-                {/* Table header */}
-                <div className="flex items-center justify-between" style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <span className="text-label">FILE</span>
-                  <span className="text-label">CRITICALITY</span>
+                {/* Column headers */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto auto 80px',
+                  gap: 14,
+                  padding: '0 16px 8px',
+                  borderBottom: `1px solid ${T.border}`,
+                }}>
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>File</span>
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Type</span>
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'right' }}>Score</span>
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Risk</span>
                 </div>
-                {/* Rows */}
-                {data.dependents.map((dep, i) => {
-                  const scoreColor = getScoreColor(dep.score);
-                  const barWidth = Math.max(8, (dep.score / maxScore) * 100);
-                  return (
-                    <div key={i}
-                      className="transition-colors"
-                      style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.03)', borderRadius: 8 }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs truncate mr-3"
-                          style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
-                          {dep.file}
-                        </span>
-                        <span className="text-xs font-bold flex-shrink-0"
-                          style={{ fontVariantNumeric: 'tabular-nums', color: scoreColor, textAlign: 'right' }}>
-                          {dep.score.toFixed(1)}
-                        </span>
-                      </div>
-                      {/* Mini bar */}
-                      <div className="mt-1.5" style={{ height: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 2 }}>
-                        <div style={{
-                          width: `${barWidth}%`,
-                          height: '100%',
-                          borderRadius: 2,
-                          background: scoreColor,
-                          opacity: 0.6,
-                          transition: 'width 0.5s ease-out',
-                        }} />
-                      </div>
-                    </div>
-                  );
-                })}
+
+                {renderGroup('Entry Points', <Zap size={14} style={{ color: T.amber }} />, entryPoints)}
+                {renderGroup('Hub Modules', <GitBranch size={14} style={{ color: T.muted }} />, hubs)}
+                {renderGroup('Regular Files', <File size={14} style={{ color: T.muted }} />, regulars)}
               </div>
             ) : (
-              <p className="text-xs py-2" style={{ color: 'var(--text-muted)' }}>No dependents found.</p>
+              <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8rem', color: T.muted }}>No dependents found.</p>
+            )}
+          </div>
+
+          {/* What This Means */}
+          <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <h3 style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', fontWeight: 600, color: T.text }}>What This Means</h3>
+              <Lightbulb size={16} style={{ color: T.amber }} />
+            </div>
+
+            {risk === 'HIGH' && (
+              <>
+                <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8125rem', color: T.muted, marginBottom: 12 }}>
+                  Before modifying <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{shortPath(cachedFile)}</span>:
+                </p>
+                <div style={{ borderLeft: `2px solid ${T.red}`, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {[
+                    <>Review all <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{directCount}</span> direct dependents</>,
+                    <>Run full test suite — <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{transitiveCount}</span> transitive files affected</>,
+                    <>Consider creating an interface/abstraction layer</>,
+                    <>Coordinate with team before merging</>,
+                  ].map((item, i) => (
+                    <div key={i} style={{
+                      fontFamily: 'var(--font-ui)',
+                      fontSize: '0.8125rem',
+                      color: T.muted,
+                      lineHeight: 1.6,
+                      padding: '8px 0',
+                    }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: T.text, marginRight: 8 }}>{i + 1}.</span>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {risk === 'MEDIUM' && (
+              <div style={{ borderLeft: `2px solid ${T.amber}`, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {[
+                  <>Review the <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{directCount}</span> direct dependents and run targeted tests.</>,
+                  <>Check hub modules that import this for cascading effects.</>,
+                ].map((item, i) => (
+                  <div key={i} style={{
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: '0.8125rem',
+                    color: T.muted,
+                    lineHeight: 1.6,
+                    padding: '8px 0',
+                  }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: T.text, marginRight: 8 }}>{i + 1}.</span>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {risk === 'LOW' && (
+              <div style={{ borderLeft: `2px solid ${T.green}`, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {[
+                  <>This change is relatively safe.</>,
+                  <>Run tests for the <span style={{ fontFamily: 'var(--font-mono)', color: T.text }}>{totalCount}</span> affected files and you're good.</>,
+                ].map((item, i) => (
+                  <div key={i} style={{
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: '0.8125rem',
+                    color: T.muted,
+                    lineHeight: 1.6,
+                    padding: '8px 0',
+                  }}>
+                    {item}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
