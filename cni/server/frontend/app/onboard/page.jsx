@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAnalysisContext } from '../client-layout';
 import { useOnboardChat } from '../../hooks/useOnboardChat';
-import { Send, MessageSquare, Trash2, MessageSquarePlus, History, ChevronDown, Download, BookOpen, CheckSquare, Square } from 'lucide-react';
+import {
+  Send, MessageSquare, Trash2, MessageSquarePlus, History,
+  ChevronDown, Download, BookOpen, Check, Circle, FileText,
+  MapPin, Building2,
+} from 'lucide-react';
 import { exportOnboardReport } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
 import ErrorMessage from '../../components/ErrorMessage';
@@ -14,62 +18,39 @@ export default function OnboardPage() {
   const {
     repoPath, stats,
     onboardData: data, onboardLoading: loading, onboardError: error,
-    fetchOnboard, setOnboardError, setOnboardLoading,
+    fetchOnboard, setOnboardError,
   } = useAnalysisContext();
 
-  // Follow-up chat from global context
   const {
-    messages,
-    streaming,
-    error: chatError,
-    ollamaDown,
-    sessionId,
-    sessions,
-    sessionsOpen,
-    setSessionsOpen,
-    sendMessage,
-    clearChat,
-    startNewSession,
-    loadSession,
-    removeSession,
+    messages, streaming, error: chatError, ollamaDown,
+    sessionId, sessions, sessionsOpen, setSessionsOpen,
+    sendMessage, clearChat, startNewSession, loadSession, removeSession,
   } = useOnboardChat();
+
   const [chatInput, setChatInput] = useState('');
   const messagesEndRef = useRef(null);
   const sessionsRef = useRef(null);
 
-  // Checklist from AppContext
   const {
     checklist, checklistProgress,
-    fetchChecklist, fetchChecklistProgress,
-    toggleChecklistItem,
+    fetchChecklist, fetchChecklistProgress, toggleChecklistItem,
   } = useAppContext();
 
-  // Fetch onboard data on mount (cached — returns instantly if already loaded)
   useEffect(() => {
-    if (repoPath && stats) {
-      fetchOnboard(repoPath);
-    }
+    if (repoPath && stats) fetchOnboard(repoPath);
   }, [repoPath, stats, fetchOnboard]);
 
-  // Fetch checklist after onboard data loads
   useEffect(() => {
-    if (data && repoPath) {
-      fetchChecklist();
-      fetchChecklistProgress();
-    }
+    if (data && repoPath) { fetchChecklist(); fetchChecklistProgress(); }
   }, [data, repoPath, fetchChecklist, fetchChecklistProgress]);
 
-  // Auto-scroll chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClick = (e) => {
-      if (sessionsRef.current && !sessionsRef.current.contains(e.target)) {
-        setSessionsOpen(false);
-      }
+      if (sessionsRef.current && !sessionsRef.current.contains(e.target)) setSessionsOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -82,7 +63,6 @@ export default function OnboardPage() {
     setChatInput('');
   };
 
-  /** Format a date string into a human-friendly label */
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     try {
@@ -98,24 +78,19 @@ export default function OnboardPage() {
       if (diffDays === 1) return 'Yesterday';
       if (diffDays < 7) return `${diffDays}d ago`;
       return d.toLocaleDateString();
-    } catch {
-      return dateStr;
-    }
+    } catch { return dateStr; }
   };
 
   if (!repoPath || !stats) return <NotAnalyzed />;
   if (loading) return <LoadingSkeleton variant="text" message="Generating onboarding report… This may take a minute" />;
   if (error) return (
-    <div className="p-6">
-      <ErrorMessage message={error.message} hint={error.hint} onRetry={() => {
-        setOnboardError(null);
-        fetchOnboard(repoPath);
-      }} />
+    <div style={{ padding: 28 }}>
+      <ErrorMessage message={error.message} hint={error.hint} onRetry={() => { setOnboardError(null); fetchOnboard(repoPath); }} />
     </div>
   );
   if (!data) return null;
 
-  const maxCentrality = Math.max(...(data.critical_modules?.map((m) => m.centrality) || [1]), 0.01);
+  const maxCentrality = Math.max(...(data.critical_modules?.map(m => m.centrality) || [1]), 0.01);
 
   const suggestedQuestions = [
     'What should I read first?',
@@ -123,438 +98,368 @@ export default function OnboardPage() {
     'Which modules are most risky to change?',
   ];
 
-  const currentSessionLabel = sessions.find((s) => s.session_id === sessionId);
+  const currentSessionLabel = sessions.find(s => s.session_id === sessionId);
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold" style={{ color: 'var(--cni-text)' }}>Onboarding Report</h2>
+    <div style={{ padding: 28 }} className="animate-fade-in">
+      {/* ── Top bar ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between" style={{ marginBottom: 36 }}>
+        <h1 className="text-section-header">Developer Onboarding</h1>
         <button
           onClick={() => exportOnboardReport(data, repoPath)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-200"
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--cni-border)',
-            color: 'var(--cni-muted)',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.3)'; e.currentTarget.style.color = '#60a5fa'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
+          className="flex items-center gap-1.5 text-xs font-medium transition-all duration-200"
+          style={{ padding: '6px 14px', borderRadius: 9999, background: 'transparent', border: '1px solid var(--border-default)', color: 'var(--text-muted)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
         >
-          <Download size={14} /> Export Report
+          <Download size={14} /> Export
         </button>
       </div>
 
-      {/* ── Entry Points ── */}
-      <div className="glass-card p-5">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--cni-text)' }}>
-          Entry Points <span className="badge-success">{data.entry_points?.length || 0}</span>
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {data.entry_points?.slice(0, 20).map((ep) => (
-            <span key={ep} className="badge-info font-mono">{ep.split(/[/\\]/).pop()}</span>
-          ))}
-          {(!data.entry_points || data.entry_points.length === 0) && <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>No entry points detected.</p>}
-        </div>
-      </div>
-
-      {/* ── Critical Modules ── */}
-      <div className="glass-card p-5">
-        <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--cni-text)' }}>
-          Critical Modules <span className="text-xs font-normal ml-1" style={{ color: 'var(--cni-muted)' }}>(read these first)</span>
-        </h3>
-        <div className="space-y-3">
-          {data.critical_modules?.map((mod, i) => (
-            <div key={i} className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs w-5 text-right" style={{ color: 'var(--cni-muted)' }}>{i + 1}.</span>
-                  <span className="text-sm font-mono" style={{ color: 'var(--cni-text)' }}>{mod.name}</span>
-                </div>
-                <span className="text-xs" style={{ color: 'var(--cni-muted)' }}>{mod.centrality.toFixed(2)}</span>
-              </div>
-              <div className="ml-7 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--cni-bg)' }}>
-                <div className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${(mod.centrality / maxCentrality) * 100}%`, background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)' }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Dead Modules ── */}
-      {data.dead_modules?.length > 0 && (
-        <div className="glass-card p-5">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--cni-text)' }}>
-            Dead Modules <span className="badge-warning">{data.dead_modules.length}</span>
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {data.dead_modules.slice(0, 20).map((dm) => <span key={dm} className="badge-warning font-mono">{dm}</span>)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* ── Section 1: Entry Points ─────────────────────────────── */}
+        <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+          <div className="flex items-center gap-2 mb-1">
+            <MapPin size={15} style={{ color: 'var(--accent)' }} />
+            <h3 className="text-sm font-semibold" style={{ color: 'white' }}>Entry Points</h3>
+            {data.entry_points?.length > 0 && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+                style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>{data.entry_points.length}</span>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* ── Architecture Summary ── */}
-      <div className="glass-card p-5">
-        <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--cni-text)' }}>Architecture Summary</h3>
-        <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(226, 232, 240, 0.8)' }}>{data.summary}</p>
-      </div>
-
-      {/* ══════════════════════════════════════════════════════════════════
-          Reading Checklist Section
-          ══════════════════════════════════════════════════════════════════ */}
-
-      {checklist.length > 0 && (() => {
-        // Group items by category
-        const CATEGORY_ORDER = ['entry_point', 'core', 'config', 'utility'];
-        const CATEGORY_LABELS = {
-          entry_point: 'Entry Points',
-          core: 'Core Modules',
-          config: 'Configuration',
-          utility: 'Utilities',
-        };
-        const groups = {};
-        checklist.forEach((item) => {
-          if (!groups[item.category]) groups[item.category] = [];
-          groups[item.category].push(item);
-        });
-        const completedCount = checklist.filter((item) => checklistProgress[item.file]).length;
-        const totalCount = checklist.length;
-        const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-        return (
-          <div className="glass-card p-5">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--cni-text)' }}>
-                <BookOpen size={16} className="text-blue-400" />
-                Reading Checklist
-              </h3>
-              <span className="text-xs font-mono px-2 py-0.5 rounded-full"
-                style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
-                {completedCount}/{totalCount} ({pct}%)
-              </span>
-            </div>
-
-            {/* Progress bar */}
-            <div className="mb-5">
-              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                <div
-                  className="h-full rounded-full transition-all duration-700 ease-out"
+          <p className="text-xs" style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Where code execution begins</p>
+          <div className="flex flex-wrap" style={{ gap: 8 }}>
+            {data.entry_points?.slice(0, 20).map(ep => {
+              const fileName = ep.split(/[/\\]/).pop();
+              return (
+                <div key={ep} className="transition-all duration-200"
                   style={{
-                    width: `${pct}%`,
-                    background: pct === 100
-                      ? 'linear-gradient(90deg, #22c55e, #4ade80)'
-                      : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                    boxShadow: pct === 100
-                      ? '0 0 8px rgba(34, 197, 94, 0.4)'
-                      : '0 0 8px rgba(59, 130, 246, 0.3)',
+                    background: 'rgba(34, 197, 94, 0.08)',
+                    border: '1px solid rgba(34, 197, 94, 0.2)',
+                    borderRadius: 9999,
+                    padding: '6px 14px',
                   }}
-                />
-              </div>
-            </div>
-
-            {/* Category groups */}
-            <div className="space-y-4">
-              {CATEGORY_ORDER.map((cat) => {
-                const items = groups[cat];
-                if (!items || items.length === 0) return null;
-                return (
-                  <div key={cat}>
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest mb-2"
-                      style={{ color: 'var(--cni-muted)' }}>
-                      {CATEGORY_LABELS[cat] || cat}
-                    </h4>
-                    <div className="space-y-1">
-                      {items.map((item) => {
-                        const done = !!checklistProgress[item.file];
-                        return (
-                          <div
-                            key={item.file}
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group cursor-pointer"
-                            style={{
-                              background: done ? 'rgba(34, 197, 94, 0.04)' : 'transparent',
-                              border: '1px solid transparent',
-                            }}
-                            onClick={() => toggleChecklistItem(item.file)}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = done ? 'rgba(34, 197, 94, 0.08)' : 'rgba(59, 130, 246, 0.06)';
-                              e.currentTarget.style.borderColor = done ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.1)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = done ? 'rgba(34, 197, 94, 0.04)' : 'transparent';
-                              e.currentTarget.style.borderColor = 'transparent';
-                            }}
-                          >
-                            {/* Checkbox icon */}
-                            <span className="flex-shrink-0 transition-transform duration-200" style={{ color: done ? '#4ade80' : 'var(--cni-muted)' }}>
-                              {done
-                                ? <CheckSquare size={16} className="animate-scale-in" />
-                                : <Square size={16} className="group-hover:scale-110 transition-transform" />
-                              }
-                            </span>
-                            {/* File name */}
-                            <a
-                              href={`/graph?search=${encodeURIComponent(item.file)}`}
-                              className="font-mono text-xs hover:underline transition-colors duration-150"
-                              style={{ color: done ? 'rgba(226, 232, 240, 0.5)' : 'var(--cni-text)', textDecoration: done ? 'line-through' : 'none' }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {item.file}
-                            </a>
-                            {/* Reason */}
-                            <span className="text-[11px] ml-auto hidden sm:block" style={{ color: 'var(--cni-muted)' }}>
-                              {item.reason}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Completion message */}
-            {pct === 100 && (
-              <div className="mt-4 text-center text-xs py-2 rounded-lg animate-fade-in"
-                style={{ background: 'rgba(34, 197, 94, 0.06)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.15)' }}>
-                🎉 All done! You&apos;ve reviewed the key files.
-              </div>
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(34, 197, 94, 0.08)'}>
+                  <span className="text-xs block" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{fileName}</span>
+                </div>
+              );
+            })}
+            {(!data.entry_points || data.entry_points.length === 0) && (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No entry points detected.</p>
             )}
           </div>
-        );
-      })()}
-
-      {/* ══════════════════════════════════════════════════════════════════
-          Follow-Up Chat Section
-          ══════════════════════════════════════════════════════════════════ */}
-
-      {/* Divider */}
-      <div className="flex items-center gap-4 py-2">
-        <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, var(--cni-border), transparent)' }} />
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs"
-          style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.15)', color: '#a5b4fc' }}>
-          <MessageSquare size={12} />
-          Follow-up Chat
         </div>
-        <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, var(--cni-border), transparent)' }} />
-      </div>
 
-      {/* Chat container */}
-      <div className="rounded-2xl overflow-hidden" style={{
-        background: 'rgba(6, 10, 19, 0.6)',
-        border: '1px solid var(--cni-border)',
-        boxShadow: '0 4px 24px rgba(0, 0, 0, 0.2)',
-      }}>
-        {/* Chat header with session controls */}
-        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid var(--cni-border)' }}>
+        {/* ── Section 2: Critical Modules ─────────────────────────── */}
+        <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+          <div className="flex items-center gap-2 mb-1">
+            <Building2 size={15} style={{ color: '#3b82f6' }} />
+            <h3 className="text-sm font-semibold" style={{ color: 'white' }}>Critical Modules</h3>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--text-muted)', marginBottom: 16 }}>Ranked by betweenness centrality</p>
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--cni-text)' }}>Ask Follow-up Questions</h3>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--cni-muted)' }}>
-              Answers include the architecture report as context
-            </p>
+            {data.critical_modules?.map((mod, i) => {
+              const barWidth = Math.max(8, (mod.centrality / maxCentrality) * 100);
+              return (
+                <div key={i}
+                  className="transition-colors"
+                  style={{ padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <div className="flex items-center justify-between" style={{ paddingLeft: 4, paddingRight: 4 }}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs w-5 text-right" style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{i + 1}.</span>
+                      <span className="text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{mod.name}</span>
+                    </div>
+                    <span className="text-xs font-bold" style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--accent)' }}>{mod.centrality.toFixed(3)}</span>
+                  </div>
+                  {/* Thin progress bar below text */}
+                  <div style={{ marginTop: 8, marginLeft: 4, marginRight: 4, height: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 2 }}>
+                    <div style={{
+                      width: `${barWidth}%`,
+                      height: '100%',
+                      borderRadius: 2,
+                      background: '#22c55e',
+                      opacity: 0.6,
+                      transition: 'width 0.5s ease-out',
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Section 3: Reading Checklist ─────────────────────────── */}
+        {checklist.length > 0 && (() => {
+          const CATEGORY_ORDER = ['entry_point', 'core', 'config', 'utility'];
+          const CATEGORY_LABELS = { entry_point: 'Entry Points', core: 'Core Modules', config: 'Configuration', utility: 'Utilities' };
+          const groups = {};
+          checklist.forEach(item => { if (!groups[item.category]) groups[item.category] = []; groups[item.category].push(item); });
+          const completedCount = checklist.filter(item => checklistProgress[item.file]).length;
+          const totalCount = checklist.length;
+          const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+          return (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+              <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
+                <BookOpen size={15} style={{ color: '#3b82f6' }} />
+                <h3 className="text-sm font-semibold" style={{ color: 'white' }}>Reading Checklist</h3>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ marginBottom: 8 }}>
+                <div className="w-full overflow-hidden rounded-full" style={{ height: 6, background: 'rgba(255,255,255,0.04)' }}>
+                  <div className="h-full rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${pct}%`, background: 'var(--accent)', boxShadow: pct === 100 ? '0 0 8px rgba(34,197,94,0.4)' : 'none' }} />
+                </div>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', marginBottom: 20 }}>
+                {completedCount} / {totalCount} ({pct}%)
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {CATEGORY_ORDER.map(cat => {
+                  const items = groups[cat];
+                  if (!items || items.length === 0) return null;
+                  return (
+                    <div key={cat}>
+                      <p className="text-label" style={{ marginBottom: 8 }}>{CATEGORY_LABELS[cat] || cat}</p>
+                      <div className="space-y-0.5">
+                        {items.map(item => {
+                          const done = !!checklistProgress[item.file];
+                          return (
+                            <div key={item.file}
+                              className="flex items-center gap-3 px-3 py-2 transition-all duration-200 cursor-pointer group"
+                              style={{ background: done ? 'rgba(34,197,94,0.04)' : 'transparent', borderRadius: 8 }}
+                              onClick={() => toggleChecklistItem(item.file)}
+                              onMouseEnter={e => e.currentTarget.style.background = done ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.02)'}
+                              onMouseLeave={e => e.currentTarget.style.background = done ? 'rgba(34,197,94,0.04)' : 'transparent'}
+                            >
+                              <span className="flex-shrink-0" style={{ color: done ? 'var(--accent)' : 'var(--text-muted)' }}>
+                                {done ? <Check size={16} /> : <Circle size={16} />}
+                              </span>
+                              <a href={`/graph?search=${encodeURIComponent(item.file)}`}
+                                className="text-xs hover:underline transition-colors"
+                                style={{
+                                  fontFamily: 'var(--font-mono)',
+                                  color: done ? 'var(--text-secondary)' : 'var(--text-primary)',
+                                  opacity: done ? 0.7 : 1,
+                                  textDecoration: done ? 'line-through' : 'none',
+                                }}
+                                onClick={e => e.stopPropagation()}>
+                                {item.file}
+                              </a>
+                              <span className="text-[11px] ml-auto hidden sm:block" style={{ color: 'var(--text-muted)' }}>
+                                {item.reason}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {pct === 100 && (
+                <div className="mt-4 text-center text-xs py-2 animate-fade-in"
+                  style={{ background: 'var(--accent-muted)', color: 'var(--accent)', border: '1px solid var(--accent-border)', borderRadius: 10 }}>
+                  🎉 All done! You&apos;ve reviewed the key files.
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── Section 4: Architecture Summary ─────────────────────── */}
+        <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+          <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
+            <FileText size={15} style={{ color: 'var(--text-secondary)' }} />
+            <h3 className="text-sm font-semibold" style={{ color: 'white' }}>Architecture Summary</h3>
+          </div>
+          <p className="text-sm leading-[1.75] whitespace-pre-wrap" style={{ color: 'var(--text-secondary)', maxWidth: 720 }}>
+            {data.summary}
+          </p>
+        </div>
+
+        {/* ── Section 5: Follow-up Chat ───────────────────────────── */}
+        <div className="overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14 }}>
+          {/* Chat header */}
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid var(--border-default)' }}>
+            <div className="flex items-center gap-2">
+              <MessageSquare size={15} style={{ color: 'var(--accent)' }} />
+              <h3 className="text-sm font-semibold" style={{ color: 'white' }}>Ask Follow-up Questions</h3>
+            </div>
+            <div className="flex items-center gap-2 relative" ref={sessionsRef}>
+              <button onClick={startNewSession}
+                className="flex items-center gap-1 text-xs font-medium transition-all duration-200"
+                style={{ padding: '5px 12px', borderRadius: 9999, background: 'var(--accent-muted)', border: '1px solid var(--accent-border)', color: 'var(--accent)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(34,197,94,0.2)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'var(--accent-muted)'}
+              >
+                <MessageSquarePlus size={11} /> New
+              </button>
+
+              {sessions.length > 0 && (
+                <button onClick={() => setSessionsOpen(!sessionsOpen)}
+                  className="flex items-center gap-1 text-xs transition-all duration-200"
+                  style={{ padding: '5px 12px', borderRadius: 9999, border: '1px solid var(--border-default)', color: 'var(--text-muted)', background: sessionsOpen ? 'rgba(255,255,255,0.04)' : 'transparent' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                >
+                  <History size={11} />
+                  <span className="max-w-[100px] truncate">{currentSessionLabel ? formatDate(currentSessionLabel.created_at) : `${sessions.length}`}</span>
+                  <ChevronDown size={10} className={`transition-transform duration-200 ${sessionsOpen ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+
+              {messages.length > 0 && (
+                <button onClick={clearChat}
+                  className="flex items-center gap-1 text-xs transition-all duration-200"
+                  style={{ padding: '5px 10px', borderRadius: 9999, color: 'var(--text-muted)', border: '1px solid var(--border-default)' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'; e.currentTarget.style.color = '#ef4444'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                >
+                  <Trash2 size={11} /> Clear
+                </button>
+              )}
+
+              {/* Sessions dropdown */}
+              {sessionsOpen && sessions.length > 0 && (
+                <div className="absolute right-0 top-full mt-2 w-72 max-h-56 overflow-y-auto z-50 animate-slide-up"
+                  style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+                  <div className="p-2 space-y-0.5">
+                    {sessions.map(s => (
+                      <div key={s.session_id}
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer transition-all duration-150 group"
+                        style={{
+                          background: s.session_id === sessionId ? 'var(--accent-muted)' : 'transparent',
+                          borderLeft: s.session_id === sessionId ? '2px solid var(--accent)' : '2px solid transparent',
+                          borderRadius: 8,
+                        }}
+                        onClick={() => loadSession(s.session_id)}
+                        onMouseEnter={e => { if (s.session_id !== sessionId) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+                        onMouseLeave={e => { if (s.session_id !== sessionId) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        {s.session_id === sessionId && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs truncate" style={{ color: s.session_id === sessionId ? 'var(--accent)' : 'var(--text-primary)' }}>
+                            {s.first_message || 'Empty session'}
+                          </p>
+                          <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            {formatDate(s.created_at)} · {s.message_count} msgs
+                          </p>
+                        </div>
+                        <button onClick={e => { e.stopPropagation(); removeSession(s.session_id); }}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded transition-all duration-150"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 relative" ref={sessionsRef}>
-            <button onClick={startNewSession}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-all duration-200"
-              style={{
-                background: 'rgba(59, 130, 246, 0.08)',
-                border: '1px solid rgba(59, 130, 246, 0.15)',
-                color: '#60a5fa',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.15)';
-                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)';
-              }}
-            >
-              <MessageSquarePlus size={11} /> New
-            </button>
+          {/* Ollama / chat errors */}
+          {ollamaDown && <div className="px-4 pt-3"><ErrorMessage message="Cannot connect to Ollama" hint="Start Ollama with: ollama serve" /></div>}
+          {chatError && !ollamaDown && <div className="px-4 pt-3"><ErrorMessage message={chatError.message} hint={chatError.hint} /></div>}
 
-            {sessions.length > 0 && (
-              <button
-                onClick={() => setSessionsOpen(!sessionsOpen)}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs transition-all duration-200"
-                style={{
-                  border: '1px solid var(--cni-border)',
-                  color: 'var(--cni-muted)',
-                  background: sessionsOpen ? 'var(--cni-surface)' : 'transparent',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)'; e.currentTarget.style.color = '#a5b4fc'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}
-              >
-                <History size={11} />
-                <span className="max-w-[100px] truncate">
-                  {currentSessionLabel ? formatDate(currentSessionLabel.created_at) : `${sessions.length}`}
-                </span>
-                <ChevronDown size={10} className={`transition-transform duration-200 ${sessionsOpen ? 'rotate-180' : ''}`} />
-              </button>
-            )}
-
-            {messages.length > 0 && (
-              <button onClick={clearChat}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-all duration-200"
-                style={{ color: 'var(--cni-muted)', border: '1px solid var(--cni-border)' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; e.currentTarget.style.color = '#f87171'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}>
-                <Trash2 size={11} />
-              </button>
-            )}
-
-            {/* Sessions dropdown */}
-            {sessionsOpen && sessions.length > 0 && (
-              <div
-                className="absolute right-0 top-full mt-2 w-72 max-h-56 overflow-y-auto rounded-xl animate-slide-up z-50"
-                style={{
-                  background: 'var(--cni-surface)',
-                  border: '1px solid var(--cni-border)',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-                }}
-              >
-                <div className="p-2 space-y-0.5">
-                  {sessions.map((s) => (
-                    <div
-                      key={s.session_id}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 group"
+          {/* Messages */}
+          <div className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight: 400, minHeight: 120 }}>
+            {messages.length === 0 && !ollamaDown && (
+              <div className="text-center py-6 space-y-3">
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Ask anything about the architecture — the LLM has the full report as context.
+                </p>
+                <div className="flex flex-wrap justify-center" style={{ gap: 8 }}>
+                  {suggestedQuestions.map(q => (
+                    <button key={q} onClick={() => setChatInput(q)}
+                      className="text-xs transition-all duration-200"
                       style={{
-                        background: s.session_id === sessionId ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
-                        borderLeft: s.session_id === sessionId ? '2px solid #6366f1' : '2px solid transparent',
+                        padding: '6px 14px',
+                        borderRadius: 9999,
+                        background: 'rgba(34, 197, 94, 0.08)',
+                        border: '1px solid rgba(34, 197, 94, 0.2)',
+                        color: 'var(--text-muted)',
                       }}
-                      onClick={() => loadSession(s.session_id)}
-                      onMouseEnter={(e) => { if (s.session_id !== sessionId) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; }}
-                      onMouseLeave={(e) => { if (s.session_id !== sessionId) e.currentTarget.style.background = 'transparent'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(34, 197, 94, 0.08)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                     >
-                      {s.session_id === sessionId && (
-                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#6366f1' }} />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs truncate" style={{ color: s.session_id === sessionId ? '#a5b4fc' : 'var(--cni-text)' }}>
-                          {s.first_message || 'Empty session'}
-                        </p>
-                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--cni-muted)' }}>
-                          {formatDate(s.created_at)} · {s.message_count} msgs
-                        </p>
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeSession(s.session_id); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded transition-all duration-150"
-                        style={{ color: 'var(--cni-muted)' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.color = '#f87171'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--cni-muted)'; }}
-                      >
-                        <Trash2 size={10} />
-                      </button>
-                    </div>
+                      {q}
+                    </button>
                   ))}
                 </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Ollama error banner */}
-        {ollamaDown && (
-          <div className="px-4 pt-3">
-            <ErrorMessage
-              message="Cannot connect to Ollama"
-              hint="Start Ollama with: ollama serve"
-            />
-          </div>
-        )}
-
-        {/* Chat error (non-Ollama) */}
-        {chatError && !ollamaDown && (
-          <div className="px-4 pt-3">
-            <ErrorMessage message={chatError.message} hint={chatError.hint} />
-          </div>
-        )}
-
-        {/* Messages area */}
-        <div className="overflow-y-auto px-5 py-4 space-y-3" style={{ maxHeight: 400, minHeight: 120 }}>
-          {messages.length === 0 && !ollamaDown && (
-            <div className="text-center py-6 space-y-3">
-              <p className="text-xs" style={{ color: 'var(--cni-muted)' }}>
-                Ask anything about the architecture — the LLM has the full report as context.
-              </p>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {suggestedQuestions.map((q) => (
-                  <button key={q} onClick={() => setChatInput(q)}
-                    className="text-xs px-3 py-1.5 rounded-full transition-all duration-200"
-                    style={{ border: '1px solid var(--cni-border)', color: 'var(--cni-muted)' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'; e.currentTarget.style.color = '#a5b4fc'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cni-border)'; e.currentTarget.style.color = 'var(--cni-muted)'; }}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-              <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
-                style={msg.role === 'user'
-                  ? { background: 'linear-gradient(135deg, #6366f1, #4f46e5)', color: 'white', borderBottomRightRadius: '6px' }
-                  : { background: 'var(--cni-surface)', border: '1px solid var(--cni-border)', color: 'var(--cni-text)', borderBottomLeftRadius: '6px' }
-                }>
-                <div className="whitespace-pre-wrap font-mono text-xs">
-                  {msg.content}
-                  {msg.role === 'assistant' && streaming && i === messages.length - 1 && msg.content && (
-                    <span className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse" style={{ background: '#a5b4fc' }} />
-                  )}
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
+                <div className="max-w-[80%] px-4 py-2.5 text-sm leading-relaxed"
+                  style={msg.role === 'user'
+                    ? { background: 'var(--accent-muted)', color: 'var(--text-primary)', borderRadius: '12px 12px 4px 12px' }
+                    : { background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', color: 'var(--text-primary)', borderRadius: '12px 12px 12px 4px' }
+                  }>
+                  <div className="whitespace-pre-wrap text-xs" style={{ fontFamily: 'var(--font-mono)' }}>
+                    {msg.content}
+                    {msg.role === 'assistant' && streaming && i === messages.length - 1 && msg.content && (
+                      <span className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse" style={{ background: 'var(--accent)' }} />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          {/* Typing indicator */}
-          {streaming && messages.length > 0 && messages[messages.length - 1]?.content === '' && (
-            <div className="flex justify-start animate-slide-up">
-              <div className="rounded-2xl px-4 py-2.5" style={{ background: 'var(--cni-surface)', border: '1px solid var(--cni-border)', borderBottomLeftRadius: '6px' }}>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#a5b4fc', animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#a5b4fc', animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#a5b4fc', animationDelay: '300ms' }} />
+            {/* Typing dots */}
+            {streaming && messages.length > 0 && messages[messages.length - 1]?.content === '' && (
+              <div className="flex justify-start animate-slide-up">
+                <div className="px-4 py-2.5" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '12px 12px 12px 4px' }}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--text-muted)', animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--text-muted)', animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--text-muted)', animationDelay: '300ms' }} />
+                  </div>
                 </div>
               </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border-default)' }}>
+            <div className="flex gap-2">
+              <input type="text" placeholder="Ask about the architecture…"
+                className="input-field flex-1 text-sm"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleChatSend()}
+                disabled={streaming || ollamaDown}
+              />
+              <button
+                className="flex items-center justify-center w-9 h-9 transition-all duration-200 disabled:opacity-40"
+                style={{
+                  background: chatInput.trim() && !streaming ? 'var(--accent)' : 'var(--bg-card)',
+                  border: '1px solid rgba(255,255,255,0.04)',
+                  borderRadius: 10,
+                  color: chatInput.trim() && !streaming ? '#000' : 'var(--text-muted)',
+                }}
+                onClick={handleChatSend}
+                disabled={!chatInput.trim() || streaming || ollamaDown}
+              >
+                {streaming ? (
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Send size={14} />
+                )}
+              </button>
             </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input bar */}
-        <div className="px-4 py-3" style={{ borderTop: '1px solid var(--cni-border)' }}>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Ask about the architecture…"
-              className="input-field flex-1 text-sm"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleChatSend()}
-              disabled={streaming || ollamaDown}
-            />
-            <button
-              className="flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 disabled:opacity-40"
-              style={{
-                background: chatInput.trim() && !streaming ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'var(--cni-surface)',
-                border: '1px solid var(--cni-border)',
-                color: chatInput.trim() && !streaming ? 'white' : 'var(--cni-muted)',
-              }}
-              onClick={handleChatSend}
-              disabled={!chatInput.trim() || streaming || ollamaDown}
-            >
-              {streaming ? (
-                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Send size={14} />
-              )}
-            </button>
           </div>
         </div>
       </div>

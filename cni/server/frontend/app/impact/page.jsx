@@ -72,10 +72,10 @@ export default function ImpactPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div style={{ padding: 28 }} className="animate-fade-in">
       {/* ── Top bar ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Impact Analysis</h1>
+      <div className="flex items-center justify-between" style={{ marginBottom: 36 }}>
+        <h1 className="text-section-header">Impact Analysis</h1>
         {data && (
           <button
             onClick={() => exportImpactReport(data, cachedFile, repoPath)}
@@ -90,8 +90,8 @@ export default function ImpactPage() {
       </div>
 
       {/* ── Input section ───────────────────────────────────────── */}
-      <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-        <p className="text-xs mb-4" style={{ color: 'var(--text-secondary)' }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24, marginBottom: 16 }}>
+        <p className="text-xs" style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
           Analyze the blast radius of changing a file
         </p>
         <div className="flex gap-3" style={{ maxWidth: 560 }}>
@@ -121,20 +121,20 @@ export default function ImpactPage() {
         </div>
         {/* Suggestion pills */}
         {suggestions.length > 0 && !data && (
-          <div className="flex flex-wrap gap-2 mt-4">
+          <div className="flex flex-wrap mt-4" style={{ gap: 8 }}>
             {suggestions.map(s => (
               <button key={s} onClick={() => { setFile(s); }}
                 className="text-[11px] transition-all duration-200"
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  padding: '4px 10px',
+                  padding: '6px 14px',
                   borderRadius: 9999,
-                  background: 'transparent',
-                  border: '1px solid var(--border-default)',
+                  background: 'rgba(34, 197, 94, 0.08)',
+                  border: '1px solid rgba(34, 197, 94, 0.2)',
                   color: 'var(--text-muted)',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(34, 197, 94, 0.08)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
               >
                 {s}
               </button>
@@ -144,19 +144,23 @@ export default function ImpactPage() {
       </div>
 
       {error && (
-        <ErrorMessage message={error.message} hint={error.hint} onRetry={handleAnalyze} />
+        <div style={{ marginBottom: 16 }}>
+          <ErrorMessage message={error.message} hint={error.hint} onRetry={handleAnalyze} />
+        </div>
       )}
 
       {/* ── Results ─────────────────────────────────────────────── */}
       {data && (
-        <div className="space-y-5 animate-slide-up">
+        <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Risk banner */}
           {data.risk && (
             <div
-              className="rounded-xl px-4 py-3 flex items-center gap-3"
+              className="flex items-center gap-3"
               style={{
                 background: riskConfig[data.risk]?.bg || 'var(--accent-muted)',
                 borderLeft: `3px solid ${riskConfig[data.risk]?.border || 'var(--accent)'}`,
+                borderRadius: 14,
+                padding: '14px 20px',
               }}
             >
               <Shield size={16} style={{ color: riskConfig[data.risk]?.color, flexShrink: 0 }} />
@@ -170,48 +174,48 @@ export default function ImpactPage() {
           )}
 
           {/* Stat cards */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="rounded-xl p-5 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-              <p className="text-label mb-2">DIRECT DEPENDENTS</p>
+          <div className="grid grid-cols-3" style={{ gap: 16 }}>
+            <div className="text-center" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+              <p className="text-label" style={{ marginBottom: 4 }}>DIRECT DEPENDENTS</p>
               <p className="text-stat" style={{ color: '#3b82f6' }}>{data.direct}</p>
             </div>
-            <div className="rounded-xl p-5 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-              <p className="text-label mb-2">TRANSITIVE DEPENDENTS</p>
+            <div className="text-center" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+              <p className="text-label" style={{ marginBottom: 4 }}>TRANSITIVE DEPENDENTS</p>
               <p className="text-stat" style={{ color: 'var(--accent)' }}>{data.transitive || 0}</p>
             </div>
-            <div className="rounded-xl p-5 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-              <p className="text-label mb-2">RISK LEVEL</p>
-              <p className="text-stat" style={{ color: riskConfig[data.risk]?.color || 'var(--text-primary)' }}>
+            <div className="text-center" style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+              <p className="text-label" style={{ marginBottom: 4 }}>RISK LEVEL</p>
+              <p className="text-stat" style={{ color: riskConfig[data.risk]?.color || 'white' }}>
                 {data.risk}
               </p>
             </div>
           </div>
 
           {/* Affected files table */}
-          <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-            <div className="flex items-center gap-2 mb-4">
+          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14, padding: 24 }}>
+            <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
               <AlertTriangle size={15} style={{ color: '#eab308' }} />
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Affected Files</h3>
+              <h3 className="text-sm font-semibold" style={{ color: 'white' }}>Affected Files</h3>
               {data.dependents?.length > 0 && (
                 <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
                   style={{ background: 'var(--warning-muted)', color: '#eab308' }}>{data.dependents.length}</span>
               )}
             </div>
             {data.dependents?.length > 0 ? (
-              <div className="space-y-0.5">
+              <div>
                 {/* Table header */}
-                <div className="flex items-center justify-between px-3 py-2">
+                <div className="flex items-center justify-between" style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <span className="text-label">FILE</span>
                   <span className="text-label">CRITICALITY</span>
                 </div>
-                <div style={{ height: 1, background: 'var(--border-default)' }} />
                 {/* Rows */}
                 {data.dependents.map((dep, i) => {
                   const scoreColor = getScoreColor(dep.score);
                   const barWidth = Math.max(8, (dep.score / maxScore) * 100);
                   return (
                     <div key={i}
-                      className="px-3 py-2.5 rounded-lg transition-colors"
+                      className="transition-colors"
+                      style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.03)', borderRadius: 8 }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
@@ -221,19 +225,21 @@ export default function ImpactPage() {
                           {dep.file}
                         </span>
                         <span className="text-xs font-bold flex-shrink-0"
-                          style={{ fontVariantNumeric: 'tabular-nums', color: scoreColor }}>
+                          style={{ fontVariantNumeric: 'tabular-nums', color: scoreColor, textAlign: 'right' }}>
                           {dep.score.toFixed(1)}
                         </span>
                       </div>
                       {/* Mini bar */}
-                      <div className="mt-1.5" style={{
-                        width: `${barWidth}%`,
-                        height: 3,
-                        borderRadius: 2,
-                        background: scoreColor,
-                        opacity: 0.6,
-                        transition: 'width 0.5s ease-out',
-                      }} />
+                      <div className="mt-1.5" style={{ height: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 2 }}>
+                        <div style={{
+                          width: `${barWidth}%`,
+                          height: '100%',
+                          borderRadius: 2,
+                          background: scoreColor,
+                          opacity: 0.6,
+                          transition: 'width 0.5s ease-out',
+                        }} />
+                      </div>
                     </div>
                   );
                 })}

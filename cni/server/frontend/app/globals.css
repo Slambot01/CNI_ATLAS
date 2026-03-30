@@ -8,36 +8,36 @@
 /*  CNI Design System — CSS Custom Properties                         */
 /* ================================================================== */
 :root {
-  /* ── Backgrounds ─────────────────────────────────────────────────── */
-  --bg-root:        #09090b;
-  --bg-surface:     #0f0f12;
-  --bg-card:        #141418;
-  --bg-card-hover:  #1a1a1f;
-  --bg-elevated:    #1e1e24;
-  --bg-input:       #0c0c0f;
+  /* ── Backgrounds (layered depth) ──────────────────────────────────── */
+  --bg-root:        #07070a;
+  --bg-surface:     #0c0c0f;
+  --bg-card:        #111113;
+  --bg-card-hover:  #161618;
+  --bg-elevated:    #1a1a1e;
+  --bg-input:       #0a0a0d;
 
   /* ── Accent (green) ──────────────────────────────────────────────── */
   --accent:         #22c55e;
   --accent-hover:   #16a34a;
-  --accent-muted:   rgba(34, 197, 94, 0.12);
-  --accent-border:  rgba(34, 197, 94, 0.25);
+  --accent-muted:   rgba(34, 197, 94, 0.10);
+  --accent-border:  rgba(34, 197, 94, 0.20);
 
   /* ── Semantic Colors ─────────────────────────────────────────────── */
   --warning:        #eab308;
-  --warning-muted:  rgba(234, 179, 8, 0.12);
+  --warning-muted:  rgba(234, 179, 8, 0.10);
   --danger:         #ef4444;
-  --danger-muted:   rgba(239, 68, 68, 0.12);
+  --danger-muted:   rgba(239, 68, 68, 0.10);
   --info:           #3b82f6;
-  --info-muted:     rgba(59, 130, 246, 0.12);
+  --info-muted:     rgba(59, 130, 246, 0.10);
 
   /* ── Text ────────────────────────────────────────────────────────── */
   --text-primary:   rgba(255, 255, 255, 0.92);
   --text-secondary: rgba(255, 255, 255, 0.55);
-  --text-muted:     rgba(255, 255, 255, 0.32);
+  --text-muted:     rgba(255, 255, 255, 0.35);
 
   /* ── Borders ─────────────────────────────────────────────────────── */
-  --border-default: rgba(255, 255, 255, 0.06);
-  --border-hover:   rgba(255, 255, 255, 0.12);
+  --border-default: rgba(255, 255, 255, 0.04);
+  --border-hover:   rgba(255, 255, 255, 0.10);
 
   /* ── Typography ──────────────────────────────────────────────────── */
   --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -78,20 +78,20 @@
     line-height: 1.6;
   }
 
-  /* ── Scrollbar ───────────────────────────────────────────────────── */
+  /* ── Scrollbar (5px, premium thin) ──────────────────────────────── */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
+    border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.15);
   }
 
   /* Firefox scrollbar */
@@ -115,18 +115,19 @@
 /*  Typography Utilities                                                */
 /* ================================================================== */
 .text-stat {
-  font-size: 2.25rem;
-  font-weight: 700;
+  font-size: 2.5rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  color: white;
 }
 
 .text-label {
-  font-size: 0.6875rem;
+  font-size: 0.65rem;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
 }
 
@@ -139,25 +140,31 @@
   font-family: var(--font-mono);
 }
 
+.text-section-header {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+}
+
 /* ================================================================== */
 /*  Component Layer                                                    */
 /* ================================================================== */
 @layer components {
-  /* ── Cards ─────────────────────────────────────────────────────── */
+  /* ── Cards (borderless, defined by background contrast) ──────── */
   .glass-card {
     background: var(--bg-card);
-    border: 1px solid var(--border-default);
-    border-radius: 16px;
-    transition: border-color 0.2s ease, background 0.2s ease;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 14px;
+    transition: background-color 0.2s ease;
   }
   .glass-card:hover {
-    border-color: var(--border-hover);
+    background: var(--bg-card-hover);
   }
 
   .glass-card-solid {
     background: var(--bg-card);
-    border: 1px solid var(--border-default);
-    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 14px;
   }
 
   /* ── Glow Effects ──────────────────────────────────────────────── */
@@ -173,24 +180,36 @@
 
   /* ── Buttons ───────────────────────────────────────────────────── */
   .btn-primary {
-    @apply px-5 py-2.5 text-sm font-medium rounded-xl
-           transition-all duration-200 ease-out active:scale-[0.97];
-    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-    color: white;
-    border: 1px solid var(--accent-border);
-    box-shadow: 0 2px 12px rgba(34, 197, 94, 0.2);
+    padding: 10px 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s ease-out;
+    background: #22c55e;
+    color: black;
+    border: none;
+    cursor: pointer;
   }
   .btn-primary:hover {
-    box-shadow: 0 4px 20px rgba(34, 197, 94, 0.35);
-    border-color: rgba(34, 197, 94, 0.5);
+    filter: brightness(1.1);
+    box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+  }
+  .btn-primary:active {
+    transform: scale(0.98);
   }
 
   .btn-ghost {
-    @apply px-3 py-2 text-sm rounded-xl transition-all duration-200;
-    color: var(--text-secondary);
+    padding: 8px 12px;
+    font-size: 0.875rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    color: rgba(255, 255, 255, 0.5);
+    background: transparent;
+    border: none;
+    cursor: pointer;
   }
   .btn-ghost:hover {
-    color: var(--text-primary);
+    color: white;
     background: rgba(255, 255, 255, 0.04);
   }
 
@@ -230,9 +249,10 @@
 
   /* ── Inputs ────────────────────────────────────────────────────── */
   .input-field {
-    @apply w-full px-4 py-2.5 text-sm rounded-xl transition-all duration-200;
+    @apply w-full px-4 py-2.5 text-sm transition-all duration-200;
     background: var(--bg-input);
-    border: 1px solid var(--border-default);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
     color: var(--text-primary);
   }
   .input-field::placeholder {
@@ -246,8 +266,34 @@
 
   /* ── Stat Card ─────────────────────────────────────────────────── */
   .stat-card {
-    @apply glass-card p-5 flex flex-col gap-1;
+    @apply glass-card flex flex-col;
+    padding: 24px;
+    gap: 4px;
   }
+}
+
+/* ================================================================== */
+/*  Table Styles                                                       */
+/* ================================================================== */
+.cni-table-header {
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 0;
+}
+
+.cni-table-row {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background-color 0.15s ease;
+}
+
+.cni-table-row:hover {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 /* ================================================================== */
@@ -275,7 +321,12 @@
 
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.7; }
+  50%      { opacity: 0.5; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
+  50%      { opacity: 0.6; box-shadow: 0 0 10px rgba(34, 197, 94, 0.7); }
 }
 
 /* ── Animation Utilities ─────────────────────────────────────────── */
@@ -284,3 +335,4 @@
 .animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
 .animate-pulse-slow     { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 .animate-pulse-subtle   { animation: pulse-subtle 2s ease-in-out infinite; }
+.animate-pulse-dot      { animation: pulse-dot 2s ease-in-out infinite; }

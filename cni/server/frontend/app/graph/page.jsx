@@ -766,7 +766,7 @@ export default function GraphPage() {
   return (
     <div className="graph-page-root" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 5.75rem)', overflow: 'hidden' }}>
       {/* ══════ Filter bar ══════ */}
-      <div className="flex items-center gap-2.5 px-4" style={{ flexShrink: 0, height: 48, borderBottom: '1px solid var(--border-default)', background: 'var(--bg-surface)' }}>
+      <div className="flex items-center gap-2.5 px-4" style={{ flexShrink: 0, height: 48, borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'var(--bg-surface)' }}>
         {[
           { label: 'Hide tests', value: hideTests, set: setHideTests },
           { label: 'Hide isolated', value: hideIsolated, set: setHideIsolated },
@@ -993,7 +993,7 @@ export default function GraphPage() {
       {/* ══════ Path Result Panel ══════ */}
       {pathMode && (pathResult !== null || pathLoading) && (
         <div className="flex items-center gap-3 px-4 animate-fade-in" style={{
-          flexShrink: 0, padding: '12px 16px', borderBottom: '1px solid var(--border-default)',
+          flexShrink: 0, padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)',
           background: 'var(--bg-card)', borderRadius: 0,
         }}>
           {pathLoading ? (
@@ -1193,7 +1193,7 @@ export default function GraphPage() {
             position: 'absolute', bottom: 20, right: 20, zIndex: 50,
             display: 'flex', flexDirection: 'column', gap: 4,
             background: 'var(--bg-card)', backdropFilter: 'blur(12px)',
-            border: '1px solid var(--border-default)', borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.04)', borderRadius: 14,
             padding: 6, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
           }}>
             {[
@@ -1227,9 +1227,9 @@ export default function GraphPage() {
 
         {/* ══════ Side Panel ══════ */}
         {panelOpen && (
-          <div style={{ width: PANEL_W, flexShrink: 0, background: 'var(--bg-card)', borderLeft: '1px solid var(--border-default)', overflowY: 'auto' }}
+          <div style={{ width: PANEL_W, flexShrink: 0, background: 'var(--bg-card)', borderLeft: '1px solid rgba(255,255,255,0.04)', overflowY: 'auto' }}
             className="animate-slide-in-right">
-            <div style={{ padding: 20 }}>
+            <div style={{ padding: 24 }}>
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-lg font-semibold" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{selectedNode.label}</h3>
                 <button onClick={handleBgClick} className="p-1 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }}

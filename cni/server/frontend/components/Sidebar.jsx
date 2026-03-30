@@ -61,7 +61,6 @@ export default function Sidebar() {
   useEffect(() => {
     if (!didMount.current) return;
     try { localStorage.setItem(LS_KEY, String(collapsed)); } catch { /* ignore */ }
-    // Broadcast width so client-layout can respond
     document.documentElement.style.setProperty(
       '--sidebar-width',
       collapsed ? `${COLLAPSED_WIDTH}px` : `${EXPANDED_WIDTH}px`
@@ -155,38 +154,64 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
-              className="relative flex items-center gap-2.5 rounded-lg transition-all duration-200 group"
+              className="relative flex items-center gap-2.5 transition-all duration-200 group"
               style={{
                 padding: collapsed ? '8px 0' : '8px 12px',
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                background: isActive ? 'var(--accent-muted)' : 'transparent',
-                color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                background: 'transparent',
                 borderRadius: 8,
               }}
               onMouseEnter={(e) => {
-                if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
               }}
               onMouseLeave={(e) => {
                 if (!isActive) e.currentTarget.style.background = 'transparent';
               }}
             >
+              {/* Active indicator: 3px rounded green bar on left edge */}
+              {isActive && (
+                <span
+                  className="absolute"
+                  style={{
+                    left: collapsed ? -2 : 0,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 3,
+                    height: 20,
+                    borderRadius: 3,
+                    background: 'var(--accent)',
+                    boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
+                  }}
+                />
+              )}
               <Icon
                 size={18}
-                className="flex-shrink-0 transition-transform duration-200 group-hover:scale-110"
+                className="flex-shrink-0 transition-all duration-200"
+                style={{
+                  color: isActive ? 'var(--accent)' : 'rgba(255,255,255,0.4)',
+                }}
               />
               {!collapsed && (
-                <span className="text-sm font-medium truncate">{label}</span>
+                <span
+                  className="text-sm font-medium truncate transition-colors duration-200"
+                  style={{
+                    color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {label}
+                </span>
               )}
 
               {/* Tooltip — collapsed only */}
               {collapsed && (
                 <span
-                  className="absolute left-full ml-3 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
+                  className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
                   style={{
-                    background: 'var(--bg-elevated)',
+                    background: '#1a1a1e',
                     border: '1px solid var(--border-hover)',
                     color: 'var(--text-primary)',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                    borderRadius: 8,
                   }}
                 >
                   {label}
@@ -232,12 +257,13 @@ export default function Sidebar() {
               <Star size={16} fill="#FFD700" />
               {/* Tooltip */}
               <span
-                className="absolute left-full ml-3 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
+                className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
                 style={{
-                  background: 'var(--bg-elevated)',
+                  background: '#1a1a1e',
                   border: '1px solid var(--border-hover)',
                   color: 'var(--text-primary)',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  borderRadius: 8,
                 }}
               >
                 {bookmarks.length} Bookmark{bookmarks.length !== 1 ? 's' : ''}
@@ -307,7 +333,7 @@ export default function Sidebar() {
           /* Collapsed: green dot only */
           <div className="flex flex-col items-center gap-1.5 group relative">
             <div
-              className={`w-2.5 h-2.5 rounded-full ${isAnalyzed ? 'animate-pulse-subtle' : ''}`}
+              className={`w-2.5 h-2.5 rounded-full ${isAnalyzed ? 'animate-pulse-dot' : ''}`}
               style={{
                 background: isAnalyzed ? 'var(--accent)' : 'var(--text-muted)',
                 boxShadow: isAnalyzed ? '0 0 8px rgba(34, 197, 94, 0.5)' : 'none',
@@ -316,13 +342,14 @@ export default function Sidebar() {
             {/* Tooltip */}
             {shortName && (
               <span
-                className="absolute left-full ml-3 bottom-0 px-2.5 py-1.5 rounded-lg text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
+                className="absolute left-full ml-3 bottom-0 px-2.5 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
                 style={{
                   fontFamily: 'var(--font-mono)',
-                  background: 'var(--bg-elevated)',
+                  background: '#1a1a1e',
                   border: '1px solid var(--border-hover)',
                   color: 'var(--accent)',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  borderRadius: 8,
                 }}
               >
                 {shortName}
@@ -332,10 +359,11 @@ export default function Sidebar() {
         ) : (
           /* Expanded: full repo info */
           <div
-            className="rounded-lg p-2.5 transition-colors duration-200"
+            className="p-2.5 transition-colors duration-200"
             style={{
               background: 'var(--bg-card)',
-              border: '1px solid var(--border-default)',
+              border: '1px solid rgba(255,255,255,0.04)',
+              borderRadius: 10,
             }}
           >
             <div className="flex items-center gap-2 mb-1">
@@ -351,7 +379,7 @@ export default function Sidebar() {
               </span>
               {isAnalyzed && (
                 <div
-                  className="w-2 h-2 rounded-full ml-auto flex-shrink-0 animate-pulse-subtle"
+                  className="w-2 h-2 rounded-full ml-auto flex-shrink-0 animate-pulse-dot"
                   style={{
                     background: 'var(--accent)',
                     boxShadow: '0 0 6px rgba(34, 197, 94, 0.5)',
@@ -386,7 +414,7 @@ export default function Sidebar() {
           color: 'var(--text-muted)',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+          e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
           e.currentTarget.style.color = 'var(--text-primary)';
         }}
         onMouseLeave={(e) => {
@@ -401,12 +429,13 @@ export default function Sidebar() {
         {/* Tooltip — collapsed only */}
         {collapsed && (
           <span
-            className="absolute left-full ml-3 px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
+            className="absolute left-full ml-3 px-2.5 py-1 text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[60]"
             style={{
-              background: 'var(--bg-elevated)',
+              background: '#1a1a1e',
               border: '1px solid var(--border-hover)',
               color: 'var(--text-primary)',
               boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+              borderRadius: 8,
             }}
           >
             Expand sidebar

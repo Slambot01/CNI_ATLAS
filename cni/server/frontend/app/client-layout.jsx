@@ -25,9 +25,9 @@ function LayoutShell({ children }) {
         className="fixed top-0 right-0 h-14 flex items-center gap-3 px-5 z-30"
         style={{
           left: 'var(--sidebar-width, 64px)',
-          background: 'rgba(9, 9, 11, 0.85)',
+          background: 'rgba(7, 7, 10, 0.85)',
           backdropFilter: 'blur(16px)',
-          borderBottom: '1px solid var(--border-default)',
+          borderBottom: '1px solid rgba(255,255,255,0.04)',
           transition: 'left 0.25s ease',
         }}
       >
@@ -69,7 +69,7 @@ function LayoutShell({ children }) {
 
       {/* Main content — uses CSS var for sidebar-aware left margin */}
       <main
-        className="mt-14 mb-9 min-h-[calc(100vh-5.75rem)]"
+        className="mt-14 mb-8 min-h-[calc(100vh-5.5rem)]"
         style={{
           marginLeft: 'var(--sidebar-width, 64px)',
           transition: 'margin-left 0.25s ease',

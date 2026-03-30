@@ -11,29 +11,37 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
  */
 export default function ErrorMessage({ message, hint, onRetry }) {
   return (
-    <div className="rounded-xl overflow-hidden animate-fade-in" style={{
-      background: 'rgba(239, 68, 68, 0.06)',
-      border: '1px solid rgba(239, 68, 68, 0.18)',
-      borderLeft: '3px solid #f87171',
-    }}>
-      <div className="px-5 py-4 flex items-start gap-3">
-        <AlertCircle size={18} className="flex-shrink-0 mt-0.5" style={{ color: '#f87171' }} />
+    <div
+      className="animate-fade-in"
+      style={{
+        background: 'var(--danger-muted)',
+        borderLeft: '3px solid var(--danger)',
+        borderRadius: 14,
+        padding: 0,
+      }}
+    >
+      <div className="flex items-start gap-3" style={{ padding: '16px 20px' }}>
+        <AlertCircle size={18} className="flex-shrink-0 mt-0.5" style={{ color: '#ef4444' }} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium" style={{ color: '#fca5a5' }}>{message}</p>
+          <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>{message}</p>
           {hint && (
-            <p className="text-xs mt-1.5" style={{ color: 'var(--cni-muted)' }}>{hint}</p>
+            <p className="text-sm mt-1.5" style={{ color: 'var(--text-secondary)' }}>{hint}</p>
           )}
         </div>
         {onRetry && (
-          <button onClick={onRetry}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex-shrink-0"
+          <button
+            onClick={onRetry}
+            className="flex items-center gap-1.5 text-xs font-medium transition-all duration-200 flex-shrink-0"
             style={{
+              padding: '6px 14px',
+              borderRadius: 10,
               background: 'rgba(239, 68, 68, 0.1)',
               border: '1px solid rgba(239, 68, 68, 0.2)',
-              color: '#f87171',
+              color: '#ef4444',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}>
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+          >
             <RefreshCw size={12} />
             Retry
           </button>

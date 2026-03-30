@@ -23,7 +23,7 @@ const RechartsChart = dynamic(() => import('../components/TimelineChart'), { ssr
 /*  Circular SVG Gauge                                                 */
 /* ================================================================== */
 function HealthGauge({ score, size = 150 }) {
-  const strokeWidth = 10;
+  const strokeWidth = 6;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(Math.max(score || 0, 0), 100);
@@ -32,10 +32,10 @@ function HealthGauge({ score, size = 150 }) {
   // Color based on score
   const color = progress >= 70 ? '#22c55e' : progress >= 40 ? '#eab308' : '#ef4444';
   const glowColor = progress >= 70
-    ? 'rgba(34, 197, 94, 0.25)'
+    ? 'rgba(34, 197, 94, 0.3)'
     : progress >= 40
-      ? 'rgba(234, 179, 8, 0.25)'
-      : 'rgba(239, 68, 68, 0.25)';
+      ? 'rgba(234, 179, 8, 0.3)'
+      : 'rgba(239, 68, 68, 0.3)';
 
   const arcRef = useRef(null);
 
@@ -59,7 +59,7 @@ function HealthGauge({ score, size = 150 }) {
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="rgba(255, 255, 255, 0.06)"
+          stroke="rgba(255, 255, 255, 0.04)"
           strokeWidth={strokeWidth}
         />
         {/* Progress arc */}
@@ -218,7 +218,6 @@ export default function DashboardPage() {
               type="text"
               placeholder="Enter repository path..."
               className="input-field h-12 text-sm text-center"
-              style={{ background: 'var(--bg-input)' }}
               value={localPath}
               onChange={(e) => setLocalPath(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAnalyze(); }}
@@ -253,25 +252,24 @@ export default function DashboardPage() {
         {recentRepos.length > 0 && (
           <div className="w-full mt-12 animate-slide-up" style={{ maxWidth: 580 }}>
             <p className="text-label mb-3 px-1">RECENT REPOSITORIES</p>
-            <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+            <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
               {recentRepos.map(repo => (
                 <div
                   key={repo.path}
-                  className="flex-shrink-0 rounded-xl cursor-pointer transition-all duration-200 group"
+                  className="flex-shrink-0 cursor-pointer transition-all duration-200 group"
                   style={{
                     background: 'var(--bg-card)',
-                    border: '1px solid var(--border-default)',
-                    padding: '14px 16px',
+                    border: '1px solid rgba(255,255,255,0.04)',
+                    borderRadius: 14,
+                    padding: '16px 18px',
                     minWidth: 200,
                     maxWidth: 260,
                   }}
                   onClick={() => handleRepoClick(repo.path)}
                   onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = 'var(--accent-border)';
                     e.currentTarget.style.background = 'var(--bg-card-hover)';
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'var(--border-default)';
                     e.currentTarget.style.background = 'var(--bg-card)';
                   }}
                 >
@@ -353,10 +351,10 @@ export default function DashboardPage() {
   const isolatedCount = stats.isolated ?? 0;
 
   return (
-    <div className="p-6 space-y-5 animate-fade-in">
+    <div style={{ padding: 28 }} className="animate-fade-in">
       {/* ── Top Bar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Dashboard</h1>
+      <div className="flex items-center justify-between" style={{ marginBottom: 36 }}>
+        <h1 className="text-section-header">Dashboard</h1>
         <div className="flex items-center gap-3">
           <span
             className="text-xs truncate"
@@ -374,17 +372,19 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Row 1: Stat Cards ────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-4" style={{ gap: 16, marginBottom: 16 }}>
         {/* Files Scanned */}
         <div
-          className="rounded-xl p-5 animate-slide-up"
+          className="animate-slide-up"
           style={{
             background: 'var(--bg-card)',
-            border: '1px solid var(--border-default)',
+            border: '1px solid rgba(255,255,255,0.04)',
+            borderRadius: 14,
+            padding: 24,
             animationDelay: '0ms',
           }}
         >
-          <p className="text-label mb-2">FILES SCANNED</p>
+          <p className="text-label" style={{ marginBottom: 4 }}>FILES SCANNED</p>
           <p
             className="text-stat"
             style={{ color: 'var(--accent)' }}
@@ -395,14 +395,16 @@ export default function DashboardPage() {
 
         {/* Dependencies */}
         <div
-          className="rounded-xl p-5 animate-slide-up"
+          className="animate-slide-up"
           style={{
             background: 'var(--bg-card)',
-            border: '1px solid var(--border-default)',
+            border: '1px solid rgba(255,255,255,0.04)',
+            borderRadius: 14,
+            padding: 24,
             animationDelay: '60ms',
           }}
         >
-          <p className="text-label mb-2">DEPENDENCIES</p>
+          <p className="text-label" style={{ marginBottom: 4 }}>DEPENDENCIES</p>
           <p
             className="text-stat"
             style={{ color: '#3b82f6' }}
@@ -413,30 +415,34 @@ export default function DashboardPage() {
 
         {/* Health Score Gauge */}
         <div
-          className="rounded-xl p-5 flex flex-col items-center animate-slide-up"
+          className="flex flex-col items-center animate-slide-up"
           style={{
             background: 'var(--bg-card)',
-            border: '1px solid var(--border-default)',
+            border: '1px solid rgba(255,255,255,0.04)',
+            borderRadius: 14,
+            padding: 24,
             animationDelay: '120ms',
           }}
         >
-          <p className="text-label mb-3 self-start">HEALTH SCORE</p>
+          <p className="text-label self-start" style={{ marginBottom: 8 }}>HEALTH SCORE</p>
           <HealthGauge score={healthData?.score} size={120} />
         </div>
 
         {/* Isolated Modules */}
         <div
-          className="rounded-xl p-5 animate-slide-up"
+          className="animate-slide-up"
           style={{
             background: 'var(--bg-card)',
-            border: '1px solid var(--border-default)',
+            border: '1px solid rgba(255,255,255,0.04)',
+            borderRadius: 14,
+            padding: 24,
             animationDelay: '180ms',
           }}
         >
-          <p className="text-label mb-2">ISOLATED MODULES</p>
+          <p className="text-label" style={{ marginBottom: 4 }}>ISOLATED MODULES</p>
           <p
             className="text-stat"
-            style={{ color: isolatedCount > 5 ? '#eab308' : 'var(--text-primary)' }}
+            style={{ color: isolatedCount > 5 ? '#eab308' : 'white' }}
           >
             {isolatedCount.toLocaleString()}
           </p>
@@ -444,15 +450,19 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Row 2: Timeline + Alerts ─────────────────────────────────── */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '58% 1fr' }}>
+      <div className="grid" style={{ gridTemplateColumns: '58% 1fr', gap: 16, marginBottom: 16 }}>
         {/* Left: Codebase Timeline */}
         <div
-          className="rounded-xl p-5"
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
+          style={{
+            background: 'var(--bg-card)',
+            border: '1px solid rgba(255,255,255,0.04)',
+            borderRadius: 14,
+            padding: 24,
+          }}
         >
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2" style={{ marginBottom: 16 }}>
             <TrendingUp size={16} style={{ color: '#3b82f6' }} />
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <h3 className="text-section-header" style={{ fontSize: '0.875rem' }}>
               Codebase Timeline
             </h3>
           </div>
@@ -481,16 +491,21 @@ export default function DashboardPage() {
         </div>
 
         {/* Right: God Modules + Unused Files stacked */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col" style={{ gap: 16 }}>
           {/* God Modules */}
           <div
-            className="rounded-xl p-5 flex-1"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
+            className="flex-1"
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid rgba(255,255,255,0.04)',
+              borderRadius: 14,
+              padding: 24,
+            }}
           >
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
               <div className="flex items-center gap-2">
                 <AlertTriangle size={15} style={{ color: '#eab308' }} />
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <h3 className="text-sm font-semibold" style={{ color: 'white' }}>
                   God Modules
                 </h3>
                 {godModules.length > 0 && (
@@ -506,13 +521,13 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-            <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)', marginBottom: 12 }}>
               Files with 10+ dependents
             </p>
             {godModules.length > 0 ? (
               <div className="space-y-1">
                 {godModules.slice(0, godExpanded ? undefined : 5).map(n => (
-                  <div key={n.id} className="flex items-center justify-between py-1">
+                  <div key={n.id} className="flex items-center justify-between py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                     <span
                       className="text-xs truncate flex-1 mr-3"
                       style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}
@@ -551,18 +566,20 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Divider */}
-          <div style={{ height: 1, background: 'var(--border-default)' }} />
-
           {/* Unused Files */}
           <div
-            className="rounded-xl p-5 flex-1"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
+            className="flex-1"
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid rgba(255,255,255,0.04)',
+              borderRadius: 14,
+              padding: 24,
+            }}
           >
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
               <div className="flex items-center gap-2">
                 <Trash2 size={15} style={{ color: 'var(--text-secondary)' }} />
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <h3 className="text-sm font-semibold" style={{ color: 'white' }}>
                   Unused Files
                 </h3>
                 {deadCode.length > 0 && (
@@ -583,8 +600,8 @@ export default function DashboardPage() {
                 {deadCode.slice(0, deadExpanded ? undefined : 5).map(n => (
                   <p
                     key={n.id}
-                    className="text-xs truncate py-0.5"
-                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
+                    className="text-xs truncate py-1"
+                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', borderBottom: '1px solid rgba(255,255,255,0.03)' }}
                   >
                     {n.label}
                   </p>
@@ -614,31 +631,29 @@ export default function DashboardPage() {
 
       {/* ── Row 3: Recent Repositories ───────────────────────────────── */}
       {recentRepos.length > 0 && (
-        <div className="animate-slide-up">
+        <div className="animate-slide-up" style={{ marginTop: 36 }}>
           <p className="text-label mb-3">RECENT REPOSITORIES</p>
-          <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+          <div className="flex overflow-x-auto pb-2" style={{ gap: 16, scrollbarWidth: 'thin' }}>
             {recentRepos.map(repo => {
               const isActive = repo.path === repoPath;
               return (
                 <div
                   key={repo.path}
-                  className="flex-shrink-0 rounded-xl cursor-pointer transition-all duration-200 group"
+                  className="flex-shrink-0 cursor-pointer transition-all duration-200 group"
                   style={{
                     background: 'var(--bg-card)',
-                    border: '1px solid var(--border-default)',
+                    border: '1px solid rgba(255,255,255,0.04)',
                     borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
-                    padding: '12px 16px',
+                    borderRadius: 14,
+                    padding: '14px 18px',
                     minWidth: 200,
                     maxWidth: 260,
                   }}
                   onClick={() => handleRepoClick(repo.path)}
                   onMouseEnter={e => {
-                    if (!isActive) e.currentTarget.style.borderColor = 'var(--border-hover)';
                     e.currentTarget.style.background = 'var(--bg-card-hover)';
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'var(--border-default)';
-                    e.currentTarget.style.borderLeftColor = isActive ? 'var(--accent)' : 'transparent';
                     e.currentTarget.style.background = 'var(--bg-card)';
                   }}
                 >
