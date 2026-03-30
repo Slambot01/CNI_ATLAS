@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../hooks/useChat';
 import { useAnalysisContext } from '../app/client-layout';
-import { MessageSquare, X, Send, Trash2 } from 'lucide-react';
+import { MessageSquare, X, Send, Trash2, PanelRightClose, PanelRightOpen } from 'lucide-react';
+
+const T = { bg: '#09090b', surface: '#111113', border: '#1f1f23', text: '#ffffff', muted: '#71717a' };
 
 /**
  * Collapsible chat sidebar for the Graph page.
@@ -44,79 +46,23 @@ export default function GraphChat({ isOpen, onToggle }) {
 
   const hasMessages = messages.length > 0;
 
-  // ─── Collapsed strip ───
+  // ─── Collapsed state: just show a toggle button ───
   if (!isOpen) {
     return (
-      <div
+      <button
+        onClick={onToggle}
+        title="Open Chat"
         style={{
-          width: 40,
-          flexShrink: 0,
-          background: 'rgba(12, 18, 32, 0.85)',
-          borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          paddingTop: 12,
-          transition: 'width 300ms ease',
-          position: 'relative',
+          position: 'absolute', top: 12, right: 12, zIndex: 30,
+          width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: T.border, border: `1px solid ${T.border}`, borderRadius: 8,
+          cursor: 'pointer', color: T.muted, transition: 'color 0.15s ease',
         }}
+        onMouseEnter={e => { e.currentTarget.style.color = T.text; }}
+        onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}
       >
-        <button
-          onClick={onToggle}
-          title="Open Chat"
-          className="group relative"
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 10,
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(59, 130, 246, 0.1)',
-            color: '#60a5fa',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
-            e.currentTarget.style.boxShadow = '0 0 12px rgba(59, 130, 246, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <MessageSquare size={16} />
-          {/* Badge dot when there are messages */}
-          {hasMessages && (
-            <span
-              style={{
-                position: 'absolute',
-                top: 4,
-                right: 4,
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: '#3b82f6',
-                boxShadow: '0 0 6px rgba(59, 130, 246, 0.6)',
-              }}
-            />
-          )}
-          {/* Tooltip */}
-          <span
-            className="absolute right-full mr-2 px-2 py-1 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200"
-            style={{
-              background: 'rgba(12,18,32,0.95)',
-              border: '1px solid var(--cni-border)',
-              color: '#e2e8f0',
-              transitionDelay: '200ms',
-            }}
-          >
-            Open Chat
-          </span>
-        </button>
-      </div>
+        <PanelRightOpen size={14} />
+      </button>
     );
   }
 
@@ -124,96 +70,55 @@ export default function GraphChat({ isOpen, onToggle }) {
   return (
     <div
       style={{
-        width: 350,
+        width: 360,
         flexShrink: 0,
-        background: 'rgba(15, 15, 20, 0.95)',
-        borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
+        background: T.surface,
+        borderLeft: `1px solid ${T.border}`,
         display: 'flex',
         flexDirection: 'column',
-        transition: 'width 300ms ease',
+        transition: 'width 0.2s ease',
         zIndex: 30,
       }}
-      className="animate-slide-in-right"
     >
       {/* ── Header ── */}
       <div
-        className="flex items-center justify-between px-4 py-3"
         style={{
-          borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-          background: 'rgba(12, 18, 32, 0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 16px',
+          borderBottom: `1px solid ${T.border}`,
         }}
       >
-        <div className="flex items-center gap-2">
-          <MessageSquare size={14} style={{ color: '#60a5fa' }} />
-          <span className="text-sm font-semibold" style={{ color: 'var(--cni-text)' }}>
-            Graph Chat
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <MessageSquare size={14} style={{ color: T.muted }} />
+          <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.875rem', fontWeight: 600, color: T.text }}>Graph Chat</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {hasMessages && (
-            <button
-              onClick={clearChat}
-              title="Clear Chat"
-              className="p-1.5 rounded-lg transition-all duration-200"
-              style={{ color: 'var(--cni-muted)', background: 'transparent' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#f87171';
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'var(--cni-muted)';
-                e.currentTarget.style.background = 'transparent';
-              }}
-            >
+            <button onClick={clearChat} title="Clear Chat"
+              style={{ padding: 6, borderRadius: 8, border: 'none', cursor: 'pointer', color: T.muted, background: 'transparent', transition: 'color 0.15s ease' }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}>
               <Trash2 size={13} />
             </button>
           )}
-          <button
-            onClick={onToggle}
-            title="Close Chat"
-            className="p-1.5 rounded-lg transition-all duration-200"
-            style={{ color: 'var(--cni-muted)', background: 'transparent' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--cni-text)';
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--cni-muted)';
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            <X size={14} />
+          <button onClick={onToggle} title="Close Chat"
+            style={{ padding: 6, borderRadius: 8, border: 'none', cursor: 'pointer', color: T.muted, background: 'transparent', transition: 'color 0.15s ease' }}
+            onMouseEnter={e => { e.currentTarget.style.color = T.text; }}
+            onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}>
+            <PanelRightClose size={14} />
           </button>
         </div>
       </div>
 
       {/* ── Context indicator ── */}
       {selectedFile && (
-        <div
-          className="flex items-center gap-2 px-4 py-2 animate-fade-in"
-          style={{
-            background: 'rgba(59, 130, 246, 0.06)',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-          }}
-        >
-          <span
-            className="flex-1 text-xs font-mono truncate px-2 py-1 rounded-md"
-            style={{
-              background: 'rgba(59, 130, 246, 0.1)',
-              color: '#93bbfc',
-              border: '1px solid rgba(59, 130, 246, 0.15)',
-            }}
-          >
-            Asking about: {selectedFile.label || selectedFile.id}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+          <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: T.text, padding: '4px 8px', borderRadius: 6, background: T.border, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {selectedFile.label || selectedFile.id}
           </span>
-          <button
-            onClick={() => setSelectedFile(null)}
-            title="Remove file context"
-            className="p-0.5 rounded transition-colors"
-            style={{ color: 'var(--cni-muted)' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--cni-text)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--cni-muted)')}
-          >
+          <button onClick={() => setSelectedFile(null)} style={{ padding: 2, borderRadius: 4, border: 'none', cursor: 'pointer', color: T.muted, background: 'transparent', transition: 'color 0.15s ease' }}
+            onMouseEnter={e => { e.currentTarget.style.color = T.text; }}
+            onMouseLeave={e => { e.currentTarget.style.color = T.muted; }}>
             <X size={12} />
           </button>
         </div>
@@ -328,60 +233,36 @@ export default function GraphChat({ isOpen, onToggle }) {
       </div>
 
       {/* ── Input bar ── */}
-      <div
-        className="px-3 py-3"
-        style={{
-          borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-          background: 'rgba(10, 10, 15, 0.6)',
-        }}
-      >
-        <div className="flex gap-2">
+      <div style={{ padding: '12px 16px', borderTop: `1px solid ${T.border}` }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <input
             type="text"
             placeholder={selectedFile ? `Ask about ${selectedFile.label}…` : 'Ask about your codebase…'}
-            className="flex-1 text-xs px-3 py-2 rounded-lg transition-all duration-200"
             style={{
-              background: 'rgba(6, 10, 19, 0.8)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              color: 'var(--cni-text)',
-              outline: 'none',
+              flex: 1, fontFamily: 'var(--font-mono)', fontSize: '0.75rem', padding: '8px 12px', borderRadius: 8,
+              background: T.bg, border: `1px solid ${T.border}`, color: T.text, outline: 'none',
+              transition: 'border-color 0.15s ease',
             }}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-              e.currentTarget.style.boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.08)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
+            onFocus={e => { e.currentTarget.style.borderColor = T.muted; }}
+            onBlur={e => { e.currentTarget.style.borderColor = T.border; }}
             disabled={streaming || ollamaDown}
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || streaming || ollamaDown}
-            className="p-2 rounded-lg transition-all duration-200 disabled:opacity-30"
             style={{
-              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-              color: 'white',
-              border: 'none',
-              cursor: !input.trim() || streaming || ollamaDown ? 'not-allowed' : 'pointer',
+              padding: 8, borderRadius: 8, border: 'none', cursor: !input.trim() || streaming || ollamaDown ? 'not-allowed' : 'pointer',
+              background: T.text, color: T.bg, transition: 'background 0.15s ease',
+              opacity: !input.trim() || streaming || ollamaDown ? 0.3 : 1,
             }}
-            onMouseEnter={(e) => {
-              if (!e.currentTarget.disabled) {
-                e.currentTarget.style.boxShadow = '0 2px 12px rgba(59, 130, 246, 0.4)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-            }}
+            onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#e4e4e7'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = T.text; }}
           >
             {streaming ? (
-              <span
-                className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin block"
-              />
+              <span style={{ width: 14, height: 14, border: `2px solid rgba(0,0,0,0.2)`, borderTopColor: T.bg, borderRadius: '50%', animation: 'spin 0.6s linear infinite', display: 'block' }} />
             ) : (
               <Send size={14} />
             )}
