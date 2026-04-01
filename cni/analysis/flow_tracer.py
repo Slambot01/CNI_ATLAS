@@ -5,6 +5,12 @@ Detects entry points and traces execution flow for a given business concept.
 
 Supports **framework-aware** entry-point detection (Django, Flask, FastAPI,
 Scrapy, Celery, etc.) as well as graph-based detection (zero in-degree nodes).
+
+Entry points are classified into three categories:
+
+- **source** — real application entry points (API routes, CLI commands, etc.)
+- **tests** — test files that naturally have zero in-degree
+- **examples** — tutorial / example / demo files
 """
 
 from __future__ import annotations
@@ -12,6 +18,7 @@ from __future__ import annotations
 import ast
 import re
 from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypedDict
 
@@ -23,14 +30,86 @@ import networkx as nx
 # ---------------------------------------------------------------------------
 
 class EntryPoint(TypedDict):
+    """A single detected entry point with its source file and matched pattern."""
+
     file: str
     decorator: str
+
+
+@dataclass
+class EntryPoints:
+    """Categorised entry points for a repository.
+
+    Attributes:
+        source:   Real application entry points (non-test, non-example).
+        tests:    Test files detected as entry points.
+        examples: Tutorial / example / demo files.
+    """
+
+    source: list[str] = field(default_factory=list)
+    tests: list[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
 
 
 class FlowReport(TypedDict):
     query: str
     entry_points: list[EntryPoint]
     flow_chains: list[list[str]]
+
+
+# ---------------------------------------------------------------------------
+# Path classification helpers
+# ---------------------------------------------------------------------------
+
+_TEST_PARTS: set[str] = {"test", "tests", "__tests__", "testing", "e2e"}
+_EXAMPLE_PARTS: set[str] = {"example", "examples", "tutorial", "tutorials", "demo", "demos"}
+
+
+def _is_test_path(path: str) -> bool:
+    """Return ``True`` if *path* belongs to a test directory or is a test file.
+
+    Args:
+        path: Absolute or relative file path string.
+
+    Returns:
+        ``True`` when the path contains a known test directory component or
+        the filename starts with ``test_``.
+    """
+    parts = set(Path(path).parts)
+    if parts & _TEST_PARTS:
+        return True
+    if Path(path).name.startswith("test_"):
+        return True
+    return False
+
+
+def _is_example_path(path: str) -> bool:
+    """Return ``True`` if *path* belongs to an example / tutorial directory.
+
+    Args:
+        path: Absolute or relative file path string.
+
+    Returns:
+        ``True`` when the path contains a known example directory component.
+    """
+    parts = set(Path(path).parts)
+    return bool(parts & _EXAMPLE_PARTS)
+
+
+def _classify_path(path: str) -> str:
+    """Classify *path* as ``'tests'``, ``'examples'``, or ``'source'``.
+
+    Args:
+        path: Absolute or relative file path string.
+
+    Returns:
+        One of ``'tests'``, ``'examples'``, or ``'source'``.
+    """
+    if _is_test_path(path):
+        return "tests"
+    if _is_example_path(path):
+        return "examples"
+    return "source"
 
 
 # ---------------------------------------------------------------------------
@@ -170,12 +249,14 @@ FRAMEWORK_PATTERNS: dict[str, list[str]] = {
 def detect_entry_points(
     file_paths: list[str],
     repo_path: str = ".",
+    graph: nx.DiGraph | None = None,
 ) -> list[EntryPoint]:
     """Detect entry points using framework-specific pattern matching.
 
     1. Detects which frameworks the repo uses via :func:`detect_framework`.
     2. Collects all relevant regex patterns for those frameworks.
     3. Scans every ``.py`` file for matching patterns.
+    4. Filters out files with high in-degree (libraries, not entry points).
 
     The ``generic`` patterns (``def main(``, ``if __name__``) are always
     included as a fallback.
@@ -183,6 +264,7 @@ def detect_entry_points(
     Args:
         file_paths: List of absolute file path strings.
         repo_path:  Root path of the repository (used for framework detection).
+        graph:      Optional dependency graph for in-degree filtering.
 
     Returns:
         List of :class:`EntryPoint` dicts with ``file`` and ``decorator``.
@@ -209,6 +291,15 @@ def detect_entry_points(
         path = Path(fp)
         if path.suffix != ".py":
             continue
+
+        # RULE 3: Pattern matching must also check in-degree.
+        # Even if a file matches @app.route, if it has in_degree >= 5
+        # it is a core module, not an entry point.
+        if graph is not None and str(path.resolve()) in graph:
+            node_key = str(path.resolve())
+            if graph.in_degree(node_key) >= 5:
+                continue
+
         try:
             source = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -245,8 +336,10 @@ def detect_entry_points_from_graph(
     An entry point is a node with **zero incoming edges** and **at least one
     outgoing edge** — i.e. it imports other modules but nothing imports it.
 
-    ``__init__.py``, ``conftest.py``, ``setup.py``, migration files, and
-    ``test_*`` files are excluded as noise.
+    Additional filtering:
+    - ``__init__.py``, ``conftest.py``, ``setup.py``, migration files are excluded.
+    - RULE 1: Files with ``in_degree >= 3`` are never entry points.
+    - ``test_*`` files are excluded.
 
     Args:
         graph: Directed dependency graph.
@@ -267,10 +360,64 @@ def detect_entry_points_from_graph(
             continue
         if name.startswith("test_"):
             continue
+
+        # RULE 1: Never flag high in-degree nodes as entry points
+        if graph.in_degree(node) >= 3:
+            continue
+
         if graph.in_degree(node) == 0 and graph.out_degree(node) > 0:
             entries.append(node)
 
     return entries
+
+
+# ---------------------------------------------------------------------------
+# Classified entry-point detection (combines both strategies)
+# ---------------------------------------------------------------------------
+
+def detect_classified_entry_points(
+    graph: nx.DiGraph,
+    file_paths: list[str],
+    repo_path: str = ".",
+) -> EntryPoints:
+    """Detect and classify entry points into source, tests, and examples.
+
+    Combines framework-pattern and graph-based detection, then classifies
+    results by path.  Source entry points are capped at 15.
+
+    Args:
+        graph:      Directed dependency graph.
+        file_paths: All file paths in the repo.
+        repo_path:  Root path of the repository.
+
+    Returns:
+        An :class:`EntryPoints` dataclass with classified lists.
+    """
+    # Strategy 1: pattern based (with in-degree filtering)
+    eps = detect_entry_points(file_paths, repo_path, graph=graph)
+    pattern_entries = [ep["file"] for ep in eps]
+
+    # Strategy 2: graph based (already filters high in-degree)
+    graph_entries = detect_entry_points_from_graph(graph, file_paths)
+
+    # Combine and deduplicate
+    all_entries = list(dict.fromkeys(pattern_entries + graph_entries))
+
+    # Classify
+    result = EntryPoints()
+    for entry in all_entries:
+        category = _classify_path(entry)
+        if category == "tests":
+            result.tests.append(entry)
+        elif category == "examples":
+            result.examples.append(entry)
+        else:
+            result.source.append(entry)
+
+    # RULE 4: Limit source entry points to 15
+    result.source = result.source[:15]
+
+    return result
 
 
 # ---------------------------------------------------------------------------

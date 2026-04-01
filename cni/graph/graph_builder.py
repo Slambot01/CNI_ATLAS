@@ -26,6 +26,7 @@ import ast
 import os
 import re
 from pathlib import Path
+from typing import Optional
 
 import networkx as nx
 
@@ -38,6 +39,14 @@ from cni.utils.errors import warning
 # ---------------------------------------------------------------------------
 
 SUPPORTED_EXTENSIONS: set[str] = {".py", ".js", ".ts", ".jsx", ".tsx"}
+
+# Directories that contain test fixtures and should be deprioritized
+# during import resolution.
+_TEST_DIRS: set[str] = {
+    "tests", "test", "spec", "__tests__",
+    "fixtures", "test_apps", "testdata",
+    "testing", "e2e",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -133,9 +142,69 @@ def extract_imports(file_path: Path) -> list[str]:
 # Import → file-path resolution
 # ---------------------------------------------------------------------------
 
-def _build_lookup(file_paths: list[Path]) -> dict[str, Path]:
+def _is_test_path(path: Path) -> bool:
+    """Check whether *path* resides inside a test / fixture directory.
+
+    Args:
+        path: Absolute or relative :class:`~pathlib.Path`.
+
+    Returns:
+        ``True`` if any component of *path* is a known test directory name.
     """
-    Build a mapping from every reasonable lookup key to an absolute Path.
+    parts = set(path.parts)
+    return bool(parts & _TEST_DIRS)
+
+
+def _resolve_best_candidate(candidates: list[Path]) -> Optional[Path]:
+    """Pick the best candidate from a list using priority rules.
+
+    Resolution priority (applied in order, each step narrows the list):
+
+    1. Prefer ``__init__.py`` packages over single-file modules.
+    2. Deprioritize files inside test / fixture directories.
+    3. Prefer files under a ``src/`` layout directory.
+
+    Args:
+        candidates: Non-empty list of candidate :class:`~pathlib.Path` objects.
+
+    Returns:
+        The best candidate, or ``None`` if the list is empty.
+    """
+    if not candidates:
+        return None
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Rule 1: prefer packages (__init__.py) over plain modules
+    packages = [c for c in candidates if c.name == "__init__.py"]
+    if packages:
+        candidates = packages
+
+    # Rule 2: deprioritize test directories
+    non_test = [c for c in candidates if not _is_test_path(c)]
+    if non_test:
+        candidates = non_test
+
+    # Rule 3: prefer src/ layout
+    src_files = [
+        c for c in candidates
+        if "/src/" in str(c).replace("\\", "/")
+    ]
+    if src_files:
+        candidates = src_files
+
+    return candidates[0] if candidates else None
+
+
+def _build_lookup(file_paths: list[Path]) -> dict[str, list[Path]]:
+    """
+    Build a mapping from every reasonable lookup key to a **list** of
+    candidate :class:`~pathlib.Path` objects.
+
+    Multiple files may share the same lookup key (e.g. ``flask`` matching
+    both ``src/flask/__init__.py`` and ``tests/.../flask.py``).  Collecting
+    all candidates lets the resolver apply priority rules later.
 
     Generates multiple keys per file so that import strings written in
     different styles (absolute path, relative slash, dot-notation) all
@@ -150,46 +219,67 @@ def _build_lookup(file_paths: list[Path]) -> dict[str, Path]:
         file_paths: List of resolved :class:`~pathlib.Path` objects.
 
     Returns:
-        Dict mapping lookup key strings to :class:`~pathlib.Path` objects.
+        Dict mapping lookup key strings to **lists** of
+        :class:`~pathlib.Path` objects.
     """
-    lookup: dict[str, Path] = {}
+    lookup: dict[str, list[Path]] = {}
 
     for fp in file_paths:
         fp = fp.resolve()
-        lookup[str(fp)] = fp
+        lookup.setdefault(str(fp), []).append(fp)
 
         # Walk up directory tree and register relative sub-paths
         parts = fp.parts
         for start in range(len(parts)):
             rel = "/".join(parts[start:])
-            # Without extension
-            rel_no_ext = "/".join(parts[start:])
             stem_parts = list(parts[start:])
             stem_parts[-1] = fp.stem          # drop extension from last part
             dot_key = ".".join(stem_parts)    # dot-notation
             slash_key = "/".join(stem_parts)  # slash without extension
 
-            lookup.setdefault(rel, fp)
-            lookup.setdefault(slash_key, fp)
-            lookup.setdefault(dot_key, fp)
+            lookup.setdefault(rel, []).append(fp)
+            lookup.setdefault(slash_key, []).append(fp)
+            lookup.setdefault(dot_key, []).append(fp)
 
     return lookup
+
+
+def _lookup_best(
+    key: str,
+    lookup: dict[str, list[Path]],
+) -> Optional[Path]:
+    """Look up *key* in the multi-candidate lookup table and return the best.
+
+    Args:
+        key:    Lookup key string.
+        lookup: Multi-candidate lookup table from :func:`_build_lookup`.
+
+    Returns:
+        Best matching :class:`~pathlib.Path`, or ``None``.
+    """
+    candidates = lookup.get(key)
+    if not candidates:
+        return None
+    return _resolve_best_candidate(candidates)
 
 
 def _resolve_python_import(
     module: str,
     source_file: Path,
-    lookup: dict[str, Path],
-) -> Path | None:
+    lookup: dict[str, list[Path]],
+) -> Optional[Path]:
     """
     Try to map a Python import string to a file path in the repository.
 
     Resolution strategy (in order):
 
     1. **Relative imports** (leading dots) — resolved against the source
-       file’s directory, walking up one level per extra dot.
+       file's directory, walking up one level per extra dot.
     2. **Absolute imports** — dot-to-slash conversion tried first, then
        direct dot-key lookup.
+
+    When multiple candidates exist for a key, priority rules from
+    :func:`_resolve_best_candidate` are applied to select the best match.
 
     Args:
         module:      Raw import string (e.g. ``'cni.utils.errors'`` or
@@ -215,19 +305,22 @@ def _resolve_python_import(
         # Try as a module file or package __init__
         for suffix in (".py", "/__init__.py"):
             key = str(candidate) + suffix
-            if key in lookup:
-                return lookup[key]
+            result = _lookup_best(key, lookup)
+            if result is not None:
+                return result
         return None
 
     # Absolute import
     slash_key = module.replace(".", "/")
     for candidate in (slash_key, slash_key + "/__init__"):
-        if candidate in lookup:
-            return lookup[candidate]
+        result = _lookup_best(candidate, lookup)
+        if result is not None:
+            return result
 
     # Try dot-notation key directly
-    if module in lookup:
-        return lookup[module]
+    result = _lookup_best(module, lookup)
+    if result is not None:
+        return result
 
     return None
 
@@ -235,8 +328,8 @@ def _resolve_python_import(
 def _resolve_js_import(
     specifier: str,
     source_file: Path,
-    lookup: dict[str, Path],
-) -> Path | None:
+    lookup: dict[str, list[Path]],
+) -> Optional[Path]:
     """
     Resolve a JS/TS import specifier to a file path in the repository.
 
@@ -259,13 +352,15 @@ def _resolve_js_import(
     candidate = (base / specifier).resolve()
 
     # Try exact path, then with each supported extension
-    if str(candidate) in lookup:
-        return lookup[str(candidate)]
+    result = _lookup_best(str(candidate), lookup)
+    if result is not None:
+        return result
 
     for ext in (".js", ".ts", ".jsx", ".tsx", "/index.js", "/index.ts"):
         key = str(candidate) + ext
-        if key in lookup:
-            return lookup[key]
+        result = _lookup_best(key, lookup)
+        if result is not None:
+            return result
 
     return None
 
@@ -273,8 +368,8 @@ def _resolve_js_import(
 def resolve_import(
     raw_import: str,
     source_file: Path,
-    lookup: dict[str, Path],
-) -> Path | None:
+    lookup: dict[str, list[Path]],
+) -> Optional[Path]:
     """Unified import resolver — dispatches by source file extension.
 
     Args:
@@ -305,6 +400,13 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
     Nodes  — absolute file path strings
     Edges  — (importer, importee)  directed dependency
 
+    After graph construction, ``indegree`` and ``outdegree`` node attributes
+    are computed from the **final** edge set to guarantee consistency:
+
+    .. code-block:: text
+
+        sum(indegrees) == sum(outdegrees) == number_of_edges
+
     Args:
         file_paths: List of file path strings (relative or absolute).
 
@@ -328,13 +430,18 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
     lookup = _build_lookup(paths)
     graph = nx.DiGraph()
 
+    # Track all valid file path strings for Rule 4 (skip unresolvable)
+    all_node_keys: set[str] = set()
+
     # Add every file as a node (skip deleted files)
     for fp in paths:
         if not fp.exists():
             warning(f"File deleted since scan: {fp.name} — skipping")
             continue
+        key = str(fp)
+        all_node_keys.add(key)
         graph.add_node(
-            str(fp),
+            key,
             language=fp.suffix.lstrip("."),
             filename=fp.name,
         )
@@ -346,7 +453,8 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
         for raw_imp in extract_imports(fp):
             target = resolve_import(raw_imp, fp, lookup)
             if target is not None and str(target) != str(fp):
-                if str(target) in graph:
+                # Rule 4: only add edge if target is a known node
+                if str(target) in all_node_keys:
                     graph.add_edge(str(fp), str(target), label=raw_imp)
 
     # Detect circular imports and warn (but do not crash)
@@ -356,6 +464,23 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
         warning(f"Circular import detected: {cycle_str}")
     except nx.NetworkXNoCycle:
         pass
+
+    # ------------------------------------------------------------------
+    # Compute degree attributes from FINAL graph state (Bug 1 fix)
+    # ------------------------------------------------------------------
+    for node in graph.nodes:
+        graph.nodes[node]["indegree"] = graph.in_degree(node)
+        graph.nodes[node]["outdegree"] = graph.out_degree(node)
+
+    # Integrity assertions — degrees must match edge count
+    assert sum(d for _, d in graph.in_degree()) == graph.number_of_edges(), (
+        f"Indegree sum {sum(d for _, d in graph.in_degree())} != "
+        f"edge count {graph.number_of_edges()}"
+    )
+    assert sum(d for _, d in graph.out_degree()) == graph.number_of_edges(), (
+        f"Outdegree sum {sum(d for _, d in graph.out_degree())} != "
+        f"edge count {graph.number_of_edges()}"
+    )
 
     return graph
 
@@ -448,6 +573,8 @@ def merge_graphs(
         Tuple of ``(unified_graph, cross_connections)`` where
         cross_connections is a list of ``(source_node, target_node)`` pairs.
     """
+    from cni.utils.platform import normalize_path
+
     unified = nx.DiGraph()
 
     # Pass 1: Add all nodes and edges with repo-prefixed names

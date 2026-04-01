@@ -7,6 +7,8 @@ WS   /ws/onboard/chat   — Streaming follow-up chat.
 
 Follow-up chat messages are persisted to the per-repo SQLite history
 database with ``page="onboard"``.
+
+All file paths in API responses are relative to the repository root.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from cni.analysis.onboarder import generate_onboarding_report
-from cni.analysis.flow_tracer import detect_entry_points
+from cni.analysis.flow_tracer import detect_entry_points, detect_classified_entry_points
 from cni.llm.llm_client import ask_llm, OLLAMA_BASE_URL, DEFAULT_MODEL
 from cni.server.state import repo_state, RepoStateError
 from cni.storage.history import (
@@ -38,6 +40,49 @@ router = APIRouter(tags=["onboard"])
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _make_relative(paths: list[str], repo_path: str) -> list[str]:
+    """Convert a list of absolute paths to repo-relative paths.
+
+    Args:
+        paths:     List of absolute or mixed-format file paths.
+        repo_path: Root path of the repository.
+
+    Returns:
+        List of relative path strings.
+    """
+    result: list[str] = []
+    rp = Path(repo_path).resolve()
+    for p in paths:
+        try:
+            rel = str(Path(p).relative_to(rp))
+        except ValueError:
+            try:
+                rel = str(Path(p).relative_to(Path(repo_path)))
+            except ValueError:
+                rel = Path(p).name
+        result.append(rel)
+    return result
+
+
+def _relative_one(abs_path: str, repo_path: str) -> str:
+    """Convert a single absolute path to a repo-relative path.
+
+    Args:
+        abs_path:  Absolute file path.
+        repo_path: Root path of the repository.
+
+    Returns:
+        Relative path string.
+    """
+    try:
+        return str(Path(abs_path).relative_to(Path(repo_path).resolve()))
+    except ValueError:
+        try:
+            return str(Path(abs_path).relative_to(Path(repo_path)))
+        except ValueError:
+            return Path(abs_path).name
+
 
 def _get_or_generate_report() -> dict:
     """Return the cached onboarding report, or generate and cache it.
@@ -62,14 +107,21 @@ def _get_or_generate_report() -> dict:
 def _format_report_for_api(report: dict) -> dict:
     """Transform the raw report into the API response shape.
 
+    All file paths are returned as repo-relative paths (Bug 6).
+
     Args:
         report: Raw report from ``generate_onboarding_report``.
 
     Returns:
-        Dict matching the existing GET /api/onboard response shape.
+        Dict matching the existing GET /api/onboard response shape,
+        with all paths relative to repository root.
     """
+    # The report from generate_onboarding_report already uses relative paths
+    # (the onboarder.py now converts them).  We pass them through directly.
     return {
         "entry_points": report["entry_points"],
+        "entry_points_tests": report.get("entry_points_tests", []),
+        "entry_points_examples": report.get("entry_points_examples", []),
         "critical_modules": [
             {"name": name, "centrality": score}
             for name, score in report["critical_modules"]
@@ -82,6 +134,8 @@ def _format_report_for_api(report: dict) -> dict:
 def _build_chat_prompt(report: dict, question: str) -> str:
     """Build an LLM prompt that includes the full onboarding context.
 
+    Uses relative paths for all file references.
+
     Args:
         report: Raw onboarding report dict.
         question: The developer's follow-up question.
@@ -90,11 +144,11 @@ def _build_chat_prompt(report: dict, question: str) -> str:
         Formatted prompt string.
     """
     entry_points = "\n".join(
-        f"  - {Path(ep).name}" for ep in report.get("entry_points", [])
+        f"  - {ep}" for ep in report.get("entry_points", [])
     ) or "  (none detected)"
 
     critical = "\n".join(
-        f"  - {name} (centrality: {score:.3f})"
+        f"  - {name} (criticality score: {score:.2f})"
         for name, score in report.get("critical_modules", [])
     ) or "  (none detected)"
 
@@ -286,8 +340,9 @@ async def ws_onboard_chat(websocket: WebSocket) -> None:
 async def get_checklist(path: str = Query(".", description="Repository root path")) -> dict:
     """Generate and return an ordered reading checklist.
 
-    The checklist is built from entry points, betweenness centrality,
+    The checklist is built from entry points, combined criticality scores,
     config files, and utility files — limited to 15 items.
+    All file paths are relative to the repository root.
     """
     import networkx as nx
 
@@ -298,55 +353,63 @@ async def get_checklist(path: str = Query(".", description="Repository root path
     except RepoStateError:
         return _not_analyzed()
 
-    # 1. Detect entry points
-    entry_points = detect_entry_points(file_paths, repo_path)
-    ep_labels: list[str] = [Path(ep["file"]).name for ep in entry_points]
+    # 1. Detect entry points (with in-degree filtering)
+    classified = detect_classified_entry_points(graph, file_paths, repo_path)
+    # Only use source entry points for the checklist
+    source_eps = classified.source
 
-    # 2. Betweenness centrality
-    centrality = nx.betweenness_centrality(graph)
+    # Convert entry points to relative paths
+    source_ep_labels = [_relative_one(ep, repo_path) for ep in source_eps]
+
+    # 2. Combined criticality scoring
+    from cni.analysis.onboarder import combined_criticality
+    betweenness = nx.betweenness_centrality(graph)
 
     # 3. Classify files
     seen: set[str] = set()
     items: list[dict] = []
 
-    # Entry points first
-    for ep in entry_points:
-        label = Path(ep["file"]).name
+    # Entry points first (use relative paths)
+    for i, ep_path in enumerate(source_eps):
+        label = source_ep_labels[i] if i < len(source_ep_labels) else _relative_one(ep_path, repo_path)
         if label in seen:
             continue
         seen.add(label)
-        decorator = ep.get("decorator", "")
         items.append({
             "file": label,
-            "reason": f"Entry point — {decorator}" if decorator else "Entry point",
+            "reason": "Entry point",
             "category": "entry_point",
         })
 
-    # Top centrality files (exclude entry points)
-    sorted_nodes = sorted(
-        centrality.items(),
-        key=lambda x: x[1],
-        reverse=True,
-    )
+    # Top criticality files (exclude entry points, use relative paths)
+    scored: list[tuple[str, float]] = []
+    for node in graph.nodes:
+        stem = Path(node).stem.lower()
+        if "__init__" in stem:
+            continue
+        score = combined_criticality(graph, node, betweenness)
+        scored.append((node, score))
+    scored.sort(key=lambda x: x[1], reverse=True)
+
     core_count = 0
-    for node_path, score in sorted_nodes:
+    for node_path, score in scored:
         if core_count >= 5:
             break
-        label = Path(node_path).name
-        if label in seen or label == "__init__.py":
+        label = _relative_one(node_path, repo_path)
+        if label in seen:
             continue
         seen.add(label)
         items.append({
             "file": label,
-            "reason": f"Core module — centrality {score:.3f}",
+            "reason": f"Core module — criticality {score:.2f}",
             "category": "core",
         })
         core_count += 1
 
-    # Config files
+    # Config files (relative paths)
     config_keywords = {"config", "settings", "env"}
     for fp in file_paths:
-        label = Path(fp).name
+        label = _relative_one(fp, repo_path)
         stem = Path(fp).stem.lower()
         if label in seen:
             continue
@@ -358,10 +421,10 @@ async def get_checklist(path: str = Query(".", description="Repository root path
                 "category": "config",
             })
 
-    # Utility files
+    # Utility files (relative paths)
     util_keywords = {"utils", "helpers", "common"}
     for fp in file_paths:
-        label = Path(fp).name
+        label = _relative_one(fp, repo_path)
         stem = Path(fp).stem.lower()
         if label in seen:
             continue
@@ -432,4 +495,3 @@ async def toggle_checklist(body: ChecklistToggle) -> dict:
         mark_uncompleted(repo_path, body.file)
 
     return {"success": True}
-
