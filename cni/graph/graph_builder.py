@@ -446,7 +446,7 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
             filename=fp.name,
         )
 
-    # Add edges for every resolvable import
+    # Add edges for every resolvable import (deduplicated per file pair)
     for fp in paths:
         if str(fp) not in graph:
             continue  # was deleted
@@ -455,7 +455,11 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
             if target is not None and str(target) != str(fp):
                 # Rule 4: only add edge if target is a known node
                 if str(target) in all_node_keys:
-                    graph.add_edge(str(fp), str(target), label=raw_imp)
+                    # Fix 1: deduplicate — one edge per (source, target) pair
+                    # Multiple import styles (import x, from x import y)
+                    # all collapse into a single dependency edge.
+                    if not graph.has_edge(str(fp), str(target)):
+                        graph.add_edge(str(fp), str(target), label=raw_imp)
 
     # Detect circular imports and warn (but do not crash)
     try:
@@ -483,6 +487,43 @@ def build_dependency_graph(file_paths: list[str]) -> nx.DiGraph:
     )
 
     return graph
+
+
+def validate_graph(graph: nx.DiGraph) -> dict[str, object]:
+    """Validate graph degree invariants.
+
+    Computes the total edge count and compares it against the sums of
+    in-degrees and out-degrees.  In a well-formed directed graph these
+    three values must always be equal.
+
+    Args:
+        graph: Directed dependency graph to validate.
+
+    Returns:
+        Dict with keys:
+
+        - ``valid``          — ``True`` when all invariants hold.
+        - ``edge_count``     — Total number of edges.
+        - ``indegree_sum``   — Sum of all node in-degrees.
+        - ``outdegree_sum``  — Sum of all node out-degrees.
+        - ``indegree_error`` — Difference ``indegree_sum - edge_count``.
+        - ``outdegree_error``— Difference ``outdegree_sum - edge_count``.
+    """
+    total_edges: int = graph.number_of_edges()
+    indegree_sum: int = sum(d for _, d in graph.in_degree())
+    outdegree_sum: int = sum(d for _, d in graph.out_degree())
+
+    return {
+        "valid": (
+            indegree_sum == total_edges
+            and outdegree_sum == total_edges
+        ),
+        "edge_count": total_edges,
+        "indegree_sum": indegree_sum,
+        "outdegree_sum": outdegree_sum,
+        "indegree_error": indegree_sum - total_edges,
+        "outdegree_error": outdegree_sum - total_edges,
+    }
 
 
 # ---------------------------------------------------------------------------

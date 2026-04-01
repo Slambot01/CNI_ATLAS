@@ -260,6 +260,10 @@ class RepoState:
         This is much faster than :func:`build_dependency_graph` because
         it skips file I/O and import extraction entirely.
 
+        Edges are deduplicated (one edge per source→target pair) and
+        ``indegree`` / ``outdegree`` node attributes are set from the
+        final graph state to stay consistent with the live builder.
+
         Args:
             file_paths: Node list (absolute file path strings).
             edges:      Edge list as ``(source, target)`` tuples.
@@ -277,7 +281,15 @@ class RepoState:
             )
         for src, tgt in edges:
             if src in graph and tgt in graph:
-                graph.add_edge(src, tgt)
+                # Deduplicate: one edge per (source, target) pair
+                if not graph.has_edge(src, tgt):
+                    graph.add_edge(src, tgt)
+
+        # Set degree attributes from final graph state
+        for node in graph.nodes:
+            graph.nodes[node]["indegree"] = graph.in_degree(node)
+            graph.nodes[node]["outdegree"] = graph.out_degree(node)
+
         return graph
 
 
