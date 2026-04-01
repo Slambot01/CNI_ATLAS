@@ -6,6 +6,7 @@ import { useAnalysisContext } from '../client-layout';
 import {
   Download, Zap, AlertTriangle, Check,
   Lightbulb, GitBranch, File, ArrowRight,
+  Info, ChevronDown, ChevronRight, FlaskConical,
 } from 'lucide-react';
 import { exportImpactReport } from '../../lib/exportReport';
 import NotAnalyzed from '../../components/NotAnalyzed';
@@ -23,6 +24,7 @@ const T = {
   amber: '#f59e0b',
   green: '#22c55e',
   red: '#ef4444',
+  blue: '#3b82f6',
 };
 
 /* ================================================================== */
@@ -30,15 +32,91 @@ const T = {
 /* ================================================================== */
 function shortPath(p) {
   if (!p) return '';
+  // If already relative (no colon, doesn't start with /), show as-is
+  if (!p.includes(':') && !p.startsWith('/')) return p;
   return p.split(/[\\/]/).slice(-2).join('/');
 }
 
 function classifyFile(dep, nodes) {
+  // Use server-provided type if available
+  if (dep.type && dep.type !== 'Normal') return dep.type;
   const node = nodes.find(n => n.label === dep.file || shortPath(n.label) === shortPath(dep.file));
   if (!node) return 'Normal';
   if (node.outdegree === 0 && node.indegree > 0) return 'Entry Point';
   if (node.indegree >= 5 && node.outdegree >= 5) return 'Hub';
   return 'Normal';
+}
+
+/* Score color helper (Bug 2) */
+function scoreColor(score) {
+  if (score >= 8) return T.red;
+  if (score >= 5) return T.amber;
+  if (score >= 2) return T.blue;
+  return T.muted;
+}
+
+/* ================================================================== */
+/*  Score Tooltip (Bug 2)                                              */
+/* ================================================================== */
+function ScoreTooltip() {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      style={{ position: 'relative', display: 'inline-flex', cursor: 'help' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <Info size={12} style={{ color: T.muted }} />
+      {show && (
+        <div style={{
+          position: 'absolute',
+          bottom: '100%',
+          right: 0,
+          marginBottom: 6,
+          background: '#1c1c20',
+          border: `1px solid ${T.border}`,
+          borderRadius: 8,
+          padding: '12px 14px',
+          width: 240,
+          zIndex: 100,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: T.text,
+            marginBottom: 8,
+          }}>Criticality Score (0–10)</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {[
+              { range: '+3', desc: 'if file is an entry point', color: T.red },
+              { range: '+2', desc: 'if file has 5+ dependents', color: T.amber },
+              { range: '+1', desc: 'per dependency chain depth', color: T.blue },
+            ].map((r, i) => (
+              <p key={i} style={{
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.6875rem',
+                color: T.muted,
+                lineHeight: 1.5,
+              }}>
+                <span style={{ fontFamily: 'var(--font-mono)', color: r.color, fontWeight: 600, marginRight: 6 }}>{r.range}</span>
+                {r.desc}
+              </p>
+            ))}
+          </div>
+          <p style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: '0.625rem',
+            color: T.muted,
+            marginTop: 8,
+            borderTop: `1px solid ${T.border}`,
+            paddingTop: 8,
+          }}>Higher = more careful review needed</p>
+        </div>
+      )}
+    </span>
+  );
 }
 
 /* ================================================================== */
@@ -129,6 +207,47 @@ function FileInput({ value, onChange, onSubmit, nodes }) {
 }
 
 /* ================================================================== */
+/*  Collapsible Section                                                */
+/* ================================================================== */
+function CollapsibleSection({ label, icon, items, defaultOpen = true, renderItem }) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (items.length === 0) return null;
+  const ChevronIcon = open ? ChevronDown : ChevronRight;
+
+  return (
+    <>
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 16px',
+          background: T.bg,
+          borderBottom: `1px solid ${T.border}`,
+          cursor: 'pointer',
+          userSelect: 'none',
+          transition: 'background 0.15s ease',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = '#0d0d0f'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = T.bg; }}
+      >
+        <ChevronIcon size={14} style={{ color: T.muted, flexShrink: 0 }} />
+        {icon}
+        <span style={{
+          fontFamily: 'var(--font-ui)',
+          fontSize: '0.75rem',
+          color: T.muted,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+        }}>{label} ({items.length})</span>
+      </div>
+      {open && items.map((item, i) => renderItem(item, i, items.length))}
+    </>
+  );
+}
+
+/* ================================================================== */
 /*  Impact Page                                                        */
 /* ================================================================== */
 export default function ImpactPage() {
@@ -180,14 +299,19 @@ export default function ImpactPage() {
   const dependents = data?.dependents || [];
   const maxScore = dependents.length > 0 ? Math.max(...dependents.map(d => d.score)) : 1;
 
-  // Classify & group dependents
-  const classified = dependents.map(d => ({
+  // Group dependents by server-provided type (Bug 1)
+  const sourceDeps = dependents.filter(d => d.type === 'source' || (!d.type));
+  const testDeps = dependents.filter(d => d.type === 'test');
+  const exampleDeps = dependents.filter(d => d.type === 'example');
+
+  // Also classify by role for sub-grouping source files
+  const classified = sourceDeps.map(d => ({
     ...d,
-    type: classifyFile(d, graphData.nodes),
+    role: classifyFile(d, graphData.nodes),
   }));
-  const entryPoints = classified.filter(d => d.type === 'Entry Point');
-  const hubs = classified.filter(d => d.type === 'Hub');
-  const regulars = classified.filter(d => d.type === 'Normal');
+  const entryPoints = classified.filter(d => d.role === 'Entry Point');
+  const hubs = classified.filter(d => d.role === 'Hub');
+  const regulars = classified.filter(d => d.role === 'Normal');
 
   // Risk config
   const riskColor = risk === 'HIGH' ? T.red : risk === 'MEDIUM' ? T.amber : T.green;
@@ -217,92 +341,70 @@ export default function ImpactPage() {
     return 'transparent';
   };
 
-  // Render a group section
-  const renderGroup = (label, icon, items) => {
-    if (items.length === 0) return null;
+  // Render a single dependent row
+  const renderDepRow = (dep, i, total) => {
+    const badge = getBadge(dep.score);
+    const rowBg = getRowBg(dep.score);
+    const barW = Math.max(8, (dep.score / maxScore) * 100);
+    const role = dep.role || classifyFile(dep, graphData.nodes);
     return (
-      <>
-        <div style={{
-          display: 'flex',
+      <div
+        key={dep.file + i}
+        onClick={() => router.push('/graph')}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto auto 80px',
           alignItems: 'center',
-          gap: 8,
-          padding: '8px 16px',
-          background: T.bg,
-          borderBottom: `1px solid ${T.border}`,
+          gap: 14,
+          padding: '12px 16px',
+          borderBottom: i < total - 1 ? `1px solid ${T.border}` : 'none',
+          background: rowBg,
+          cursor: 'pointer',
+          transition: 'background 0.15s ease',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(31,31,35,0.5)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = rowBg; }}
+      >
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.8rem',
+          color: T.text,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>{shortPath(dep.file)}</span>
+        <span style={{
+          fontFamily: 'var(--font-ui)',
+          fontSize: '0.75rem',
+          color: T.muted,
+        }}>{role}</span>
+        {/* Bug 2: Color-coded scores */}
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.7rem',
+          fontWeight: 600,
+          padding: '2px 8px',
+          borderRadius: 9999,
+          background: badge.bg,
+          color: scoreColor(dep.score),
+          fontVariantNumeric: 'tabular-nums',
+          textAlign: 'right',
+        }}>{dep.score.toFixed(1)}</span>
+        <div style={{
+          background: T.border,
+          borderRadius: 2,
+          height: 3,
+          overflow: 'hidden',
         }}>
-          {icon}
-          <span style={{
-            fontFamily: 'var(--font-ui)',
-            fontSize: '0.75rem',
-            color: T.muted,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}>{label} ({items.length})</span>
+          <div style={{
+            width: `${barW}%`,
+            height: '100%',
+            borderRadius: 2,
+            background: badge.barColor,
+            transition: 'width 0.5s ease',
+          }} />
         </div>
-        {items.map((dep, i) => {
-          const badge = getBadge(dep.score);
-          const rowBg = getRowBg(dep.score);
-          const barW = Math.max(8, (dep.score / maxScore) * 100);
-          return (
-            <div
-              key={dep.file + i}
-              onClick={() => router.push('/graph')}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto auto 80px',
-                alignItems: 'center',
-                gap: 14,
-                padding: '12px 16px',
-                borderBottom: i < items.length - 1 ? `1px solid ${T.border}` : 'none',
-                background: rowBg,
-                cursor: 'pointer',
-                transition: 'background 0.15s ease',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(31,31,35,0.5)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = rowBg; }}
-            >
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.8rem',
-                color: T.text,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>{shortPath(dep.file)}</span>
-              <span style={{
-                fontFamily: 'var(--font-ui)',
-                fontSize: '0.75rem',
-                color: T.muted,
-              }}>{dep.type}</span>
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                padding: '2px 8px',
-                borderRadius: 9999,
-                background: badge.bg,
-                color: badge.color,
-                fontVariantNumeric: 'tabular-nums',
-                textAlign: 'right',
-              }}>{dep.score.toFixed(1)}</span>
-              <div style={{
-                background: T.border,
-                borderRadius: 2,
-                height: 3,
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${barW}%`,
-                  height: '100%',
-                  borderRadius: 2,
-                  background: badge.barColor,
-                  transition: 'width 0.5s ease',
-                }} />
-              </div>
-            </div>
-          );
-        })}
-      </>
+      </div>
     );
   };
 
@@ -519,16 +621,77 @@ export default function ImpactPage() {
                 }}>
                   <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>File</span>
                   <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Type</span>
-                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'right' }}>Score</span>
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'right', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Score <ScoreTooltip />
+                  </span>
                   <span style={{ fontFamily: 'var(--font-ui)', fontSize: '0.7rem', color: T.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Risk</span>
                 </div>
 
-                {renderGroup('Entry Points', <Zap size={14} style={{ color: T.amber }} />, entryPoints)}
-                {renderGroup('Hub Modules', <GitBranch size={14} style={{ color: T.muted }} />, hubs)}
-                {renderGroup('Regular Files', <File size={14} style={{ color: T.muted }} />, regulars)}
+                {/* Source files — always open */}
+                {sourceDeps.length > 0 && (
+                  <>
+                    <CollapsibleSection
+                      label="Source files affected"
+                      icon={<File size={14} style={{ color: T.text }} />}
+                      items={entryPoints}
+                      defaultOpen={true}
+                      renderItem={renderDepRow}
+                    />
+                    <CollapsibleSection
+                      label="Hub modules"
+                      icon={<GitBranch size={14} style={{ color: T.muted }} />}
+                      items={hubs}
+                      defaultOpen={true}
+                      renderItem={renderDepRow}
+                    />
+                    <CollapsibleSection
+                      label="Regular files"
+                      icon={<File size={14} style={{ color: T.muted }} />}
+                      items={regulars}
+                      defaultOpen={true}
+                      renderItem={renderDepRow}
+                    />
+                  </>
+                )}
+
+                {/* Test files — collapsed by default (Bug 1) */}
+                {testDeps.length > 0 && (
+                  <CollapsibleSection
+                    label="Test files affected"
+                    icon={<FlaskConical size={14} style={{ color: T.amber }} />}
+                    items={testDeps}
+                    defaultOpen={false}
+                    renderItem={renderDepRow}
+                  />
+                )}
+
+                {/* Example files — collapsed by default */}
+                {exampleDeps.length > 0 && (
+                  <CollapsibleSection
+                    label="Example files affected"
+                    icon={<Lightbulb size={14} style={{ color: T.amber }} />}
+                    items={exampleDeps}
+                    defaultOpen={false}
+                    renderItem={renderDepRow}
+                  />
+                )}
               </div>
             ) : (
               <p style={{ fontFamily: 'var(--font-ui)', fontSize: '0.8rem', color: T.muted }}>No dependents found.</p>
+            )}
+
+            {/* Scope note */}
+            {data.note && (
+              <p style={{
+                fontFamily: 'var(--font-ui)',
+                fontSize: '0.6875rem',
+                color: T.muted,
+                marginTop: 14,
+                padding: '8px 12px',
+                background: T.bg,
+                borderRadius: 6,
+                borderLeft: `2px solid ${T.border}`,
+              }}>{data.note}</p>
             )}
           </div>
 
